@@ -1,6 +1,6 @@
 # Next iteration
 
-This is a proposed plan for a portfolio-oriented refinement, not a record of completed changes. Keep the original course submission unchanged and compare each iteration with the same input images.
+This is the remaining plan for a portfolio-oriented refinement. The first depth comparison and a manual SAM box prompt were tested on 20 October 2026; see [the experiment record](experiment-2026-10-20.md). Keep the original course submission preserved and compare each iteration with the same input images.
 
 1. **Establish a trustworthy baseline.** Run the current script on a small set of simple and patterned mugs; retain the input, mask, depth, fur layer, final composite, elapsed time, and failure reason locally. Resolve report/code differences before making implementation claims.
 2. **Improve segmentation control.** Test a small manual correction path such as a box or extra foreground/background points for the cases where the centre prompt selects a stripe. Show the trade-off between automation and control.

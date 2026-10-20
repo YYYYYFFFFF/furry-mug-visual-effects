@@ -28,7 +28,17 @@ python fur_rendering_batch.py --limit 1 --depth-source preview8
 python fur_rendering_batch.py --limit 1 --depth-source float
 ```
 
-The code change has passed syntax checks, but the complete model pipeline and resulting image quality have not yet been verified in this environment. Keep the two output directories and inspect the images before calling this a visual improvement.
+The two modes were rendered on `mug1.jpg` and `mug9.jpg` on 20 October 2026. Float depth visibly reduces banding in the normal maps, while the change to the final fur image is modest. The patterned mug exposed a separate centre-point mask failure. See [the local experiment record](docs/experiment-2026-10-20.md) for the tested inputs, results and limitations.
+
+## Mask control for patterned mugs
+
+The `--image` option selects one input by filename. When the default centre-point SAM prompt selects only part of a mug, `--mask-box X0 Y0 X1 Y1` supplies a pixel-coordinate box for that image. The tested `mug9.jpg` box below covers the whole cup body and handle:
+
+```bash
+python fur_rendering_batch.py --image mug9.jpg --depth-source float --mask-box 30 75 585 560
+```
+
+Box runs save to `outputs/<timestamp>-float-box/`. Each run also saves `run_config.json` alongside the generated images. The box coordinates need to be adjusted for other photos.
 
 ## Current constraints
 

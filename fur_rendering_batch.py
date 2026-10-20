@@ -115,11 +115,12 @@ def make_output_prefix(index: int) -> str:
 
 
 class FurRenderingBatchRunner:
-    def __init__(self, project_root: Path, image_dir: Path, output_root: Path, depth_source: str) -> None:
+    def __init__(self, project_root: Path, image_dir: Path, output_root: Path, depth_source: str, mask_box: list[int] | None) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
         self.output_root = output_root
         self.depth_source = depth_source
+        self.mask_box = mask_box
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -186,13 +187,22 @@ class FurRenderingBatchRunner:
             self.predictor.set_image(image_np)
             center_x = width // 2
             center_y = height // 2
-            input_point = np.array([[center_x, center_y]])
-            input_label = np.array([1])
-            masks, scores, _ = self.predictor.predict(
-                point_coords=input_point,
-                point_labels=input_label,
-                multimask_output=True,
-            )
+            if self.mask_box is None:
+                input_point = np.array([[center_x, center_y]])
+                input_label = np.array([1])
+                masks, scores, _ = self.predictor.predict(
+                    point_coords=input_point,
+                    point_labels=input_label,
+                    multimask_output=True,
+                )
+            else:
+                x0, y0, x1, y1 = self.mask_box
+                if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
+                    raise ValueError("Mask box must fit inside the image: x0 y0 x1 y1.")
+                masks, scores, _ = self.predictor.predict(
+                    box=np.array(self.mask_box),
+                    multimask_output=True,
+                )
             best_mask = masks[np.argmax(scores)]
             mug_matte = best_mask.astype(np.uint8)
             mask_area = np.sum(best_mask)
@@ -202,7 +212,7 @@ class FurRenderingBatchRunner:
                 raise ValueError("Detected mug matte is too small. Please use a clearer centered mug image.")
             if mask_ratio > 0.85:
                 raise ValueError("Detected mug matte is too large and likely includes background.")
-            if not bool(best_mask[center_y, center_x]):
+            if self.mask_box is None and not bool(best_mask[center_y, center_x]):
                 raise ValueError("Image center is not inside the mug matte.")
             top_touch = np.any(best_mask[0:5, :])
             bottom_touch = np.any(best_mask[-5:, :])
@@ -510,12 +520,29 @@ def parse_args() -> argparse.Namespace:
         help="Optional cap on how many images to process.",
     )
     parser.add_argument(
+        "--image",
+        type=str,
+        default=None,
+        help="Process only the named file from image_folder (for example, mug9.jpg).",
+    )
+    parser.add_argument(
+        "--mask-box",
+        type=int,
+        nargs=4,
+        metavar=("X0", "Y0", "X1", "Y1"),
+        default=None,
+        help="Use a pixel-coordinate SAM box prompt for a selected image instead of the center point.",
+    )
+    parser.add_argument(
         "--depth-source",
         choices=("float", "preview8"),
         default="float",
         help="Use full-precision model depth (default) or the original 8-bit preview for A/B comparison.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.mask_box is not None and args.image is None:
+        parser.error("--mask-box requires --image so the coordinates apply to one input.")
+    return args
 
 
 def main() -> int:
@@ -525,13 +552,16 @@ def main() -> int:
     image_dir = (project_root / "image_folder").resolve()
     output_base_dir = (project_root / "outputs").resolve()
     run_timestamp = make_run_timestamp()
-    output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}"
+    run_suffix = "-box" if args.mask_box is not None else ""
+    output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
         log(f"Image folder not found: {image_dir}")
         return 1
 
     images = list(iter_images(image_dir))
+    if args.image is not None:
+        images = [path for path in images if path.name == args.image]
     if args.limit is not None:
         images = images[: args.limit]
 
@@ -544,17 +574,23 @@ def main() -> int:
     log(f"Output base dir: {output_base_dir}")
     log(f"Run output dir: {output_root}")
     log(f"Depth source: {args.depth_source}")
+    log(f"Mask prompt: {args.mask_box if args.mask_box is not None else 'center point'}")
     log(f"Discovered {len(images)} image(s)")
     for image_path in images:
         log(f" - {image_path.name}")
 
     output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "run_config.json").write_text(
+        json.dumps({"image": args.image, "depth_source": args.depth_source, "mask_box": args.mask_box}, indent=2),
+        encoding="utf-8",
+    )
 
     runner = FurRenderingBatchRunner(
         project_root=project_root,
         image_dir=image_dir,
         output_root=output_root,
         depth_source=args.depth_source,
+        mask_box=args.mask_box,
     )
     runner.load_models()
 
