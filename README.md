@@ -2,9 +2,9 @@
 
 An independent COMP5405 course project that turns a centred mug photo into a fur-like composite using pretrained depth estimation, SAM segmentation, and procedural strand rendering. The course output is an exploratory approximation and does not match the quality of the reference paper.
 
-This directory is the `improve/fur-quality-v2` Git worktree. The original course submission and the desktop `main` worktree remain separate. Local input photos and the reference PDF were copied here for comparison; Git ignores them.
+This directory is the `improve/fur-quality-v2` Git worktree. The original course submission and the desktop `main` worktree remain separate. The input archive is tracked in `data/input-images/`; working copies in `image_folder/` and the reference PDF remain Git-ignored.
 
-See [release and result archive](docs/versioning.md) for the approved version names and how each version's generated images will be retained.
+See [release and result archive](docs/versioning.md) for the version names and the private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) with the saved course results.
 
 ## Run the batch script
 
@@ -17,7 +17,7 @@ python -m pip install -r requirements.txt
 python fur_rendering_batch.py --limit 1
 ```
 
-Put one or more `.jpg` or `.png` inputs in `image_folder/`. The batch script saves results under `outputs/<timestamp>/`. `Final_Project.ipynb` is the notebook version. The four notebooks in `experiments/` document earlier method exploration and include Colab-specific code; they are not the main entry point. Notebook execution outputs were removed from these copies, while code cells were retained.
+Put one or more `.jpg` or `.png` inputs in `image_folder/`. The original input set and its checksums are stored separately from the program in [data/input-images/](data/README.md); copy the images you want to test into `image_folder/` after cloning. The v2 batch script saves results under `outputs/<timestamp>-<depth-source>/`. `Final_Project.ipynb` still contains the course baseline pipeline and has not received the v2 depth change. The four notebooks in `experiments/` document earlier method exploration and include Colab-specific code; they are not the main entry point. Notebook execution outputs were removed from these copies, while code cells were retained.
 
 ## First v2 experiment: depth precision
 
@@ -39,4 +39,4 @@ The code change has passed syntax checks, but the complete model pipeline and re
 
 The reference paper by Pouli et al., *Rendering fur directly into images*, is available locally at `docs/CAG2010_fur.pdf` and is ignored by Git.
 
-See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. Input photos, model weights, and generated images are local and ignored by Git until their usage rights and presentation role are decided.
+See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. The input photos are tracked in `data/input-images/` within this private archive; model weights and generated images remain Git-ignored. Only approved generated results should be attached to their matching GitHub Release. Check image reuse rights before making this repository public.

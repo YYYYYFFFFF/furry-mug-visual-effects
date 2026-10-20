@@ -1,12 +1,12 @@
 # Release and result archive
 
-Only versions Yifan has reviewed and approved are published as GitHub Releases. Development commits, including the current depth-precision experiment, are not releases. The local `original-program` tag identifies the baseline code while its result archive is still pending.
+Only versions Yifan has reviewed and approved are published as GitHub Releases. Development commits, including the current depth-precision experiment, are not releases. The `original-program` tag and its archived course results are published in the private GitHub repository.
 
 ## Names and version numbers
 
 | Release title | Git tag | Meaning |
 | --- | --- | --- |
-| `Original program` | `original-program` | Course-program baseline at commit `b1bedba` |
+| `Original program` | `original-program` | Course-program code and input archive at commit `8094479` |
 | `Furry Mug V1.0` | `v1.0` | First approved improved version |
 | `Furry Mug V1.1` | `v1.1` | A smaller approved change after V1.0 |
 | `Furry Mug V2.0` | `v2.0` | A substantial approved change after V1.x |
@@ -17,8 +17,8 @@ Increase the first number for a substantial change to the visual result or metho
 
 For each approved version, create a GitHub Release from its tag and attach a result bundle, for example `furry-mug-v1.0-results.zip`. Include the final images, useful pipeline views, and a small manifest recording the code commit, input image identifiers and checksums, model identifiers or checkpoint checksums, key settings, and output checksums. Keep older releases and their assets intact so the code and the images shown for that version remain together.
 
-Store source mug images in a separate private image-data location with its own version or checksums; refer to that exact data version from each result manifest. Confirm reuse rights before making any source image or derived output public. The reference-paper PDF stays local; repository documentation may cite and link to the paper.
+Store source mug images in the same private repository under `data/input-images/`, apart from the program files. `data/manifest.json` records their SHA-256 checksums; refer to those exact files from each result manifest. Confirm reuse rights before making any source image or derived output public. The reference-paper PDF stays local; repository documentation may cite and link to the paper.
 
 Pretrained model weights are runtime dependencies, not release images. The script obtains Depth Anything V2 through Transformers and downloads the SAM ViT-B checkpoint when absent. Record the exact model source and version or file checksum used for an approved run. Do not upload weight copies by default.
 
-The `original-program` tag exists locally. No GitHub remote or Release has been created yet. Original-program result files have not been located in this worktree, so its Release should wait until matching outputs are found or regenerated and checked. The current v2 depth experiment has not passed visual review and has no release tag.
+The private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) includes ten saved full-pipeline PNGs from the course report materials in `original-program-results.zip`, with source notes and checksums. They were not regenerated from the tagged code, and their numbered mapping to individual input files has not been independently verified. The current v2 depth experiment has not passed visual review and has no release tag.
