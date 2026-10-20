@@ -22,4 +22,6 @@ Put one or more `.jpg` or `.png` inputs in `image_folder/`. The batch script sav
 - The final fur appearance is recognisable but below the visual quality of the reference research.
 - The course report and batch script differ in some model and rendering details. Describe the version actually run when presenting results.
 
+The reference paper by Pouli et al., *Rendering fur directly into images*, is available locally at `docs/CAG2010_fur.pdf` and is ignored by Git.
+
 See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. Input photos, model weights, and generated images are local and ignored by Git until their usage rights and presentation role are decided.

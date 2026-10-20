@@ -15,3 +15,6 @@ outputs/
 # Course input photos are local test data until their reuse rights are confirmed.
 image_folder/*
 !image_folder/.gitkeep
+
+# Local reference paper; keep the publisher PDF out of repository history.
+docs/CAG2010_fur.pdf
