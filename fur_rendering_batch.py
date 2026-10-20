@@ -125,6 +125,8 @@ class FurRenderingBatchRunner:
         stroke_rasterizer: str,
         stroke_width_scale: float,
         fur_density: float,
+        underlayer_mode: str,
+        exclude_mask_path: Path | None,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -134,6 +136,8 @@ class FurRenderingBatchRunner:
         self.stroke_rasterizer = stroke_rasterizer
         self.stroke_width_scale = stroke_width_scale
         self.fur_density = fur_density
+        self.underlayer_mode = underlayer_mode
+        self.exclude_mask_path = exclude_mask_path
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -217,6 +221,16 @@ class FurRenderingBatchRunner:
                     multimask_output=True,
                 )
             best_mask = masks[np.argmax(scores)]
+            if self.mask_box is None and not bool(best_mask[center_y, center_x]):
+                raise ValueError("Image center is not inside the mug matte.")
+            excluded_region = np.zeros((height, width), dtype=bool)
+            if self.exclude_mask_path is not None:
+                with Image.open(self.exclude_mask_path) as exclusion_image:
+                    exclusion = np.asarray(exclusion_image.convert("L"))
+                if exclusion.shape != (height, width):
+                    raise ValueError("Exclude mask must match the selected image dimensions.")
+                excluded_region = exclusion > 127
+                best_mask = best_mask & ~excluded_region
             mug_matte = best_mask.astype(np.uint8)
             mask_area = np.sum(best_mask)
             image_area = height * width
@@ -225,8 +239,6 @@ class FurRenderingBatchRunner:
                 raise ValueError("Detected mug matte is too small. Please use a clearer centered mug image.")
             if mask_ratio > 0.85:
                 raise ValueError("Detected mug matte is too large and likely includes background.")
-            if self.mask_box is None and not bool(best_mask[center_y, center_x]):
-                raise ValueError("Image center is not inside the mug matte.")
             top_touch = np.any(best_mask[0:5, :])
             bottom_touch = np.any(best_mask[-5:, :])
             left_touch = np.any(best_mask[:, 0:5])
@@ -450,6 +462,8 @@ class FurRenderingBatchRunner:
             fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
             fur_alpha = fur_alpha_blurred * mask + fur_alpha * (1 - mask)
             fur_alpha = np.clip(fur_alpha * 1.05, 0.0, 0.92)
+            if self.exclude_mask_path is not None:
+                fur_alpha[excluded_region] = 0.0
             log(
                 f"[{index}/{total}] Stage 5/7 complete: {stage_elapsed_message(stage_started)}; "
                 f"sampled base color {np.round(base_color, 3).tolist()}"
@@ -459,9 +473,24 @@ class FurRenderingBatchRunner:
             log(f"[{index}/{total}] Stage 6/7: compositing final image")
             stage_started = time.time()
             result_float = image_float.copy()
-            diffuse_underlayer = np.zeros_like(result_float)
-            for channel in range(3):
-                diffuse_underlayer[:, :, channel] = base_color[channel]
+            if self.underlayer_mode == "local":
+                # Normalized masked blur keeps broad object shading without sampling the background.
+                blur_sigma = 32.0
+                blurred_weight = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), blur_sigma)
+                blurred_color = cv2.GaussianBlur(image_float * mask_3d, (0, 0), blur_sigma)
+                diffuse_underlayer = np.clip(
+                    blurred_color / np.maximum(blurred_weight[:, :, np.newaxis], 1e-6),
+                    0.0,
+                    1.0,
+                )
+                underlayer_preview = (1.0 - mask_3d) * image_float + mask_3d * diffuse_underlayer
+                Image.fromarray((underlayer_preview * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_underlayer.png"
+                )
+            else:
+                diffuse_underlayer = np.zeros_like(result_float)
+                for channel in range(3):
+                    diffuse_underlayer[:, :, channel] = base_color[channel]
             result_float = (1.0 - mask_3d) * result_float + mask_3d * diffuse_underlayer
             distance_from_edge = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
             distance_normalized = np.clip(distance_from_edge / 12.0, 0.0, 1.0)
@@ -557,6 +586,12 @@ def parse_args() -> argparse.Namespace:
         help="Use a pixel-coordinate SAM box prompt for a selected image instead of the center point.",
     )
     parser.add_argument(
+        "--exclude-mask",
+        type=Path,
+        default=None,
+        help="Exclude white pixels in a same-size grayscale mask from fur; requires --image.",
+    )
+    parser.add_argument(
         "--stroke-rasterizer",
         choices=("legacy", "aa8"),
         default="legacy",
@@ -575,6 +610,12 @@ def parse_args() -> argparse.Namespace:
         help="Set strand root density per estimated surface area; 0.35 is the original value.",
     )
     parser.add_argument(
+        "--underlayer-mode",
+        choices=("flat", "local"),
+        default="flat",
+        help="Use the original single-colour underlayer or a masked, blurred local-colour underlayer.",
+    )
+    parser.add_argument(
         "--depth-source",
         choices=("float", "preview8"),
         default="float",
@@ -583,6 +624,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.mask_box is not None and args.image is None:
         parser.error("--mask-box requires --image so the coordinates apply to one input.")
+    if args.exclude_mask is not None and args.image is None:
+        parser.error("--exclude-mask requires --image so the mask applies to one input.")
     return args
 
 
@@ -596,6 +639,12 @@ def main() -> int:
     project_root = Path(__file__).resolve().parent
     image_dir = (project_root / "image_folder").resolve()
     output_base_dir = (project_root / "outputs").resolve()
+    exclude_mask_path = None
+    if args.exclude_mask is not None:
+        exclude_mask_path = args.exclude_mask if args.exclude_mask.is_absolute() else project_root / args.exclude_mask
+        exclude_mask_path = exclude_mask_path.resolve()
+        if not exclude_mask_path.is_file():
+            raise ValueError(f"Exclude mask not found: {exclude_mask_path}")
     run_timestamp = make_run_timestamp()
     run_suffix = "-box" if args.mask_box is not None else ""
     if args.stroke_rasterizer == "aa8":
@@ -604,6 +653,10 @@ def main() -> int:
         run_suffix += f"-width{args.stroke_width_scale:g}"
     if args.fur_density != 0.35:
         run_suffix += f"-density{args.fur_density:g}"
+    if args.underlayer_mode != "flat":
+        run_suffix += f"-underlayer-{args.underlayer_mode}"
+    if exclude_mask_path is not None:
+        run_suffix += "-exclude"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -629,6 +682,8 @@ def main() -> int:
     log(f"Stroke rasterizer: {args.stroke_rasterizer}")
     log(f"Stroke width scale: {args.stroke_width_scale:g}")
     log(f"Fur density: {args.fur_density:g}")
+    log(f"Underlayer mode: {args.underlayer_mode}")
+    log(f"Exclude mask: {exclude_mask_path if exclude_mask_path is not None else 'none'}")
     log(f"Discovered {len(images)} image(s)")
     for image_path in images:
         log(f" - {image_path.name}")
@@ -643,6 +698,8 @@ def main() -> int:
                 "stroke_rasterizer": args.stroke_rasterizer,
                 "stroke_width_scale": args.stroke_width_scale,
                 "fur_density": args.fur_density,
+                "underlayer_mode": args.underlayer_mode,
+                "exclude_mask": str(args.exclude_mask) if args.exclude_mask is not None else None,
             },
             indent=2,
         ),
@@ -658,6 +715,8 @@ def main() -> int:
         stroke_rasterizer=args.stroke_rasterizer,
         stroke_width_scale=args.stroke_width_scale,
         fur_density=args.fur_density,
+        underlayer_mode=args.underlayer_mode,
+        exclude_mask_path=exclude_mask_path,
     )
     runner.load_models()
 

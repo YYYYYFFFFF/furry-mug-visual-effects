@@ -50,7 +50,17 @@ python fur_rendering_batch.py --image mug9.jpg --depth-source float --mask-box 3
 
 The optional defaults are `legacy`, width scale `1`, and density `0.35`. Running without the new options reproduced the prior final PNG byte for byte. The comparison images, exact settings and limitations are in [the stroke experiment record](docs/stroke-experiment-2026-10-20.md). Generated images remain local and Git-ignored until a version is approved for release.
 
-The [next visual target](docs/visual-target.md) provisionally uses `mug3.jpg` as the development hero, with `mug1.jpg` as a second check and `mug9.jpg` as a challenge case. It records the reference figures, current baseline and a subjective review rubric.
+## Cup-interior region control
+
+An optional same-size grayscale `--exclude-mask` keeps white-marked pixels free of fur. This local experiment uses hand-placed masks for the visible cup interiors of `mug3.jpg` and `mug1.jpg`; it does not automatically find those regions. On both tested images, the opening is easier to read. Use the mask matching the selected photo:
+
+```bash
+python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --exclude-mask data/region-masks/mug3-interior.png
+```
+
+The optional `--underlayer-mode local` was tested against the original `flat` underlayer while keeping the other settings fixed. It had little visible effect on the final mug, so `flat` stays the default. See [the region and underlayer experiment](docs/region-underlayer-experiment-2026-10-20.md) for the A/B images, settings, measured checks and remaining rim and strand issues. These are unpublished local development results.
+
+The [visual target](docs/visual-target.md) provisionally uses `mug3.jpg` as the development hero, with `mug1.jpg` as a second check and `mug9.jpg` as a challenge case. It records the reference figures, current baseline and a subjective review rubric.
 
 ## Current constraints
 

@@ -21,7 +21,7 @@ All ten archived inputs are 602 × 602 pixels; a local contact sheet is at `outp
 | Secondary check | `mug1.jpg` | Its softer pink colour and different cup shape reveal whether improvements carry over to another input. An earlier render under the same stroke settings already exists. |
 | Challenge case | `mug9.jpg` | High-contrast pattern exposes masking and colour-transfer failures. A manual SAM box previously selected the full mug after the centre prompt selected only part of it. |
 
-The baseline for `mug3.jpg` used float depth, the centre-point SAM prompt, `aa8` stroke rasterization, width scale `0.5`, density `0.35` and fixed seed `42`. The mask covered 53.1% of the frame and the renderer generated 196,968 strands. It includes the cup interior as part of the mug region, and the final cup appears much darker and more uniform than the original. The current single-colour underlayer likely contributes to that appearance; this needs a controlled test. Inspect the saved pipeline rather than treating the mask as a perfect material-region label.
+The baseline for `mug3.jpg` used float depth, the centre-point SAM prompt, `aa8` stroke rasterization, width scale `0.5`, density `0.35` and fixed seed `42`. The mask covered 53.1% of the frame and the renderer generated 196,968 strands. It includes the cup interior as part of the mug region, and the final cup appears much darker and more uniform than the original. A controlled test later found that the single-colour underlayer was not the main visible cause; see the region and underlayer experiment. Inspect the saved pipeline rather than treating the mask as a perfect material-region label.
 
 ```bash
 python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5
@@ -41,6 +41,6 @@ To make the requested “80% close” goal reviewable, score each item from 0 (p
 
 Yifan's own visual judgment should decide whether a result is close enough; the numeric gate is only a way to compare local iterations consistently.
 
-## Next controlled change
+## Controlled region test and next target
 
-On `mug3.jpg`, separate the outer fur region from the cup interior and test a spatially varying underlayer that preserves broad light and shadow while suppressing the original ceramic texture. Keep depth, stroke settings and random seed fixed for the A/B comparison. Repeat the selected result on `mug1.jpg`; use `mug9.jpg` to expose remaining failure cases. The new underlayer and region logic are proposed, not implemented in this record.
+The planned [2 × 2 region and underlayer test](region-underlayer-experiment-2026-10-20.md) was completed locally on `mug3.jpg`, then the useful region control was checked on `mug1.jpg`. Hand-placed interior masks restored readable cup openings on both images. A local-colour underlayer had little effect on the final composite, so the original flat setting remains the tested preference. The masks are per-image manual inputs and the result has not passed the subjective review gate above. Next, refine strand colour and shading, then the excessive rim tufts while holding the other settings fixed. `mug9.jpg` remains a later challenge case.
