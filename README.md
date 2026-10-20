@@ -50,6 +50,8 @@ python fur_rendering_batch.py --image mug9.jpg --depth-source float --mask-box 3
 
 The optional defaults are `legacy`, width scale `1`, and density `0.35`. Running without the new options reproduced the prior final PNG byte for byte. The comparison images, exact settings and limitations are in [the stroke experiment record](docs/stroke-experiment-2026-10-20.md). Generated images remain local and Git-ignored until a version is approved for release.
 
+The [next visual target](docs/visual-target.md) provisionally uses `mug3.jpg` as the development hero, with `mug1.jpg` as a second check and `mug9.jpg` as a challenge case. It records the reference figures, current baseline and a subjective review rubric.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.
