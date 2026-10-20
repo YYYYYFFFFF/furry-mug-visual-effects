@@ -13,7 +13,7 @@ python -m pip install -r requirements.txt
 python fur_rendering_batch.py --limit 1
 ```
 
-Put one or more `.jpg` or `.png` inputs in `image_folder/`. The batch script saves results under `outputs/<timestamp>/`. `Final_Project.ipynb` is the notebook version. The four notebooks in `experiments/` document earlier method exploration and include Colab-specific code; they are not the main entry point. Notebook execution outputs were removed from these copies, while code cells were retained.
+Put one or more `.jpg` or `.png` inputs in `image_folder/`. The original input set and its checksums are stored separately from the program in [data/input-images/](data/README.md); copy the images you want to test into `image_folder/` after cloning. The batch script saves results under `outputs/<timestamp>/`. `Final_Project.ipynb` is the notebook version. The four notebooks in `experiments/` document earlier method exploration and include Colab-specific code; they are not the main entry point. Notebook execution outputs were removed from these copies, while code cells were retained.
 
 ## Current constraints
 
@@ -24,4 +24,4 @@ Put one or more `.jpg` or `.png` inputs in `image_folder/`. The batch script sav
 
 The reference paper by Pouli et al., *Rendering fur directly into images*, is available locally at `docs/CAG2010_fur.pdf` and is ignored by Git.
 
-See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. Input photos, model weights, and generated images are local and ignored by Git until their usage rights and presentation role are decided.
+See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. The input photos are tracked in `data/input-images/` within this private archive; model weights and generated images remain Git-ignored. Only approved generated results should be attached to their matching GitHub Release. Check image reuse rights before making this repository public.
