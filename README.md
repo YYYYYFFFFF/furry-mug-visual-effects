@@ -1,8 +1,8 @@
-# Furry Mug Visual Effects — v2 worktree
+# Furry Mug Visual Effects
 
 An independent COMP5405 course project that turns a centred mug photo into a fur-like composite using pretrained depth estimation, SAM segmentation, and procedural strand rendering. The course output is an exploratory approximation and does not match the quality of the reference paper.
 
-This directory is the `improve/fur-quality-v2` Git worktree. The original course submission and the desktop `main` worktree remain separate. The input archive is tracked in `data/input-images/`; working copies in `image_folder/` and the reference PDF remain Git-ignored.
+This local checkout is on `improve/fur-quality-v2`, the current depth-precision experiment. The original course program is preserved by the `original-program` Git tag and GitHub Release. The input archive is tracked in `data/input-images/`; working copies in `image_folder/` and the reference PDF remain Git-ignored.
 
 See [release and result archive](docs/versioning.md) for the version names and the private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) with the saved course results.
 
@@ -39,4 +39,4 @@ The code change has passed syntax checks, but the complete model pipeline and re
 
 The reference paper by Pouli et al., *Rendering fur directly into images*, is available locally at `docs/CAG2010_fur.pdf` and is ignored by Git.
 
-See `docs/optimization-notes.md` for a focused next iteration. The original course submission remains separate and unchanged. The input photos are tracked in `data/input-images/` within this private archive; model weights and generated images remain Git-ignored. Only approved generated results should be attached to their matching GitHub Release. Check image reuse rights before making this repository public.
+See `docs/optimization-notes.md` for a focused next iteration. The original course program remains preserved under the `original-program` tag. The input photos are tracked in `data/input-images/` within this private archive; model weights and generated images remain Git-ignored. Only approved generated results should be attached to their matching GitHub Release. Check image reuse rights before making this repository public.
