@@ -115,10 +115,11 @@ def make_output_prefix(index: int) -> str:
 
 
 class FurRenderingBatchRunner:
-    def __init__(self, project_root: Path, image_dir: Path, output_root: Path) -> None:
+    def __init__(self, project_root: Path, image_dir: Path, output_root: Path, depth_source: str) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
         self.output_root = output_root
+        self.depth_source = depth_source
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -163,7 +164,15 @@ class FurRenderingBatchRunner:
             log(f"[{index}/{total}] Stage 1/7: estimating depth map")
             stage_started = time.time()
             result = self.depth_pipe(image)
-            depth = np.array(result["depth"]).astype(np.float32)
+            if self.depth_source == "float":
+                depth_output = result["predicted_depth"]
+                if torch.is_tensor(depth_output):
+                    depth_output = depth_output.detach().cpu().numpy()
+            else:
+                depth_output = result["depth"]
+            depth = np.squeeze(np.asarray(depth_output, dtype=np.float32))
+            if depth.ndim != 2 or not np.isfinite(depth).all():
+                raise ValueError("Depth model returned an invalid 2D depth map.")
             depth = cv2.resize(depth, image.size)
             depth_norm = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
             depth_gray = (depth_norm * 255).astype(np.uint8)
@@ -500,6 +509,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional cap on how many images to process.",
     )
+    parser.add_argument(
+        "--depth-source",
+        choices=("float", "preview8"),
+        default="float",
+        help="Use full-precision model depth (default) or the original 8-bit preview for A/B comparison.",
+    )
     return parser.parse_args()
 
 
@@ -510,7 +525,7 @@ def main() -> int:
     image_dir = (project_root / "image_folder").resolve()
     output_base_dir = (project_root / "outputs").resolve()
     run_timestamp = make_run_timestamp()
-    output_root = output_base_dir / run_timestamp
+    output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}"
 
     if not image_dir.exists():
         log(f"Image folder not found: {image_dir}")
@@ -528,13 +543,19 @@ def main() -> int:
     log(f"Image folder: {image_dir}")
     log(f"Output base dir: {output_base_dir}")
     log(f"Run output dir: {output_root}")
+    log(f"Depth source: {args.depth_source}")
     log(f"Discovered {len(images)} image(s)")
     for image_path in images:
         log(f" - {image_path.name}")
 
     output_root.mkdir(parents=True, exist_ok=True)
 
-    runner = FurRenderingBatchRunner(project_root=project_root, image_dir=image_dir, output_root=output_root)
+    runner = FurRenderingBatchRunner(
+        project_root=project_root,
+        image_dir=image_dir,
+        output_root=output_root,
+        depth_source=args.depth_source,
+    )
     runner.load_models()
 
     results = []
