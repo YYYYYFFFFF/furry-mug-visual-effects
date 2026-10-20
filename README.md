@@ -4,6 +4,8 @@ An independent COMP5405 course project that turns a centred mug photo into a fur
 
 This directory is the `improve/fur-quality-v2` Git worktree. The original course submission and the desktop `main` worktree remain separate. Local input photos and the reference PDF were copied here for comparison; Git ignores them.
 
+See [release and result archive](docs/versioning.md) for the approved version names and how each version's generated images will be retained.
+
 ## Run the batch script
 
 Use Python 3.10–3.12 and have Git available for the `segment-anything` dependency. The first run downloads pretrained model weights and needs internet access.
