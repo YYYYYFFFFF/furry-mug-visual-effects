@@ -115,12 +115,25 @@ def make_output_prefix(index: int) -> str:
 
 
 class FurRenderingBatchRunner:
-    def __init__(self, project_root: Path, image_dir: Path, output_root: Path, depth_source: str, mask_box: list[int] | None) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        image_dir: Path,
+        output_root: Path,
+        depth_source: str,
+        mask_box: list[int] | None,
+        stroke_rasterizer: str,
+        stroke_width_scale: float,
+        fur_density: float,
+    ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
         self.output_root = output_root
         self.depth_source = depth_source
         self.mask_box = mask_box
+        self.stroke_rasterizer = stroke_rasterizer
+        self.stroke_width_scale = stroke_width_scale
+        self.fur_density = fur_density
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -285,7 +298,7 @@ class FurRenderingBatchRunner:
             image_float = image_np.astype(np.float32) / 255.0
             mask = mug_matte.astype(np.uint8)
             depth_scale = max(float(vertices[:, 2].max()), 1.0)
-            fur_density = 0.35
+            fur_density = self.fur_density
             fur_length_min = 6.0
             fur_length_max = 15.0
             gravity_dir = np.array([0.0, 1.0, 0.0], dtype=np.float32)
@@ -387,8 +400,9 @@ class FurRenderingBatchRunner:
             else:
                 base_color = np.array([0.68, 0.48, 0.40], dtype=np.float32)
                 tip_color = np.array([0.86, 0.70, 0.62], dtype=np.float32)
-            fur_layer = np.zeros((height, width, 3), dtype=np.float32)
-            fur_alpha = np.zeros((height, width), dtype=np.float32)
+            canvas_dtype = np.uint8 if self.stroke_rasterizer == "aa8" else np.float32
+            fur_layer = np.zeros((height, width, 3), dtype=canvas_dtype)
+            fur_alpha = np.zeros((height, width), dtype=canvas_dtype)
             render_progress_step = max(len(hairs) // 4, 1)
             for hair_index, hair in enumerate(hairs, start=1):
                 root_pos = hair[0]
@@ -417,11 +431,20 @@ class FurRenderingBatchRunner:
                     shaded_color = np.clip(strand_color * light_color * (0.5 + 0.5 * diffuse), 0.0, 1.0)
                     x0, y0 = int(round(p0[0])), int(round(p0[1]))
                     x1, y1 = int(round(p1[0])), int(round(p1[1]))
-                    width_px = max(2, int(4.8 * (1.0 - 0.35 * t)))
-                    cv2.line(fur_layer, (x0, y0), (x1, y1), shaded_color.tolist(), thickness=width_px, lineType=cv2.LINE_AA)
-                    cv2.line(fur_alpha, (x0, y0), (x1, y1), 1.0, thickness=width_px, lineType=cv2.LINE_AA)
+                    width_px = max(1, int(4.8 * (1.0 - 0.35 * t) * self.stroke_width_scale))
+                    if self.stroke_rasterizer == "aa8":
+                        draw_color = tuple(int(round(float(value) * 255)) for value in shaded_color)
+                        draw_alpha = 255
+                    else:
+                        draw_color = shaded_color.tolist()
+                        draw_alpha = 1.0
+                    cv2.line(fur_layer, (x0, y0), (x1, y1), draw_color, thickness=width_px, lineType=cv2.LINE_AA)
+                    cv2.line(fur_alpha, (x0, y0), (x1, y1), draw_alpha, thickness=width_px, lineType=cv2.LINE_AA)
                 if hair_index % render_progress_step == 0 or hair_index == len(hairs):
                     log(f"[{index}/{total}] Stage 5/7 progress: rendered {hair_index}/{len(hairs)} strands")
+            if self.stroke_rasterizer == "aa8":
+                fur_layer = fur_layer.astype(np.float32) / 255.0
+                fur_alpha = fur_alpha.astype(np.float32) / 255.0
             fur_layer_blurred = cv2.GaussianBlur(fur_layer, (0, 0), sigmaX=1.2, sigmaY=1.2)
             fur_layer = np.clip(0.85 * fur_layer + 0.15 * fur_layer_blurred, 0.0, 1.0)
             fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
@@ -534,6 +557,24 @@ def parse_args() -> argparse.Namespace:
         help="Use a pixel-coordinate SAM box prompt for a selected image instead of the center point.",
     )
     parser.add_argument(
+        "--stroke-rasterizer",
+        choices=("legacy", "aa8"),
+        default="legacy",
+        help="Use the original float canvas or 8-bit anti-aliased line drawing.",
+    )
+    parser.add_argument(
+        "--stroke-width-scale",
+        type=float,
+        default=1.0,
+        help="Scale strand thickness; 1.0 preserves the original widths.",
+    )
+    parser.add_argument(
+        "--fur-density",
+        type=float,
+        default=0.35,
+        help="Set strand root density per estimated surface area; 0.35 is the original value.",
+    )
+    parser.add_argument(
         "--depth-source",
         choices=("float", "preview8"),
         default="float",
@@ -548,11 +589,21 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     ensure_environment()
     args = parse_args()
+    if not np.isfinite(args.stroke_width_scale) or args.stroke_width_scale <= 0:
+        raise ValueError("--stroke-width-scale must be a positive finite number")
+    if not np.isfinite(args.fur_density) or args.fur_density <= 0:
+        raise ValueError("--fur-density must be a positive finite number")
     project_root = Path(__file__).resolve().parent
     image_dir = (project_root / "image_folder").resolve()
     output_base_dir = (project_root / "outputs").resolve()
     run_timestamp = make_run_timestamp()
     run_suffix = "-box" if args.mask_box is not None else ""
+    if args.stroke_rasterizer == "aa8":
+        run_suffix += "-aa8"
+    if args.stroke_width_scale != 1.0:
+        run_suffix += f"-width{args.stroke_width_scale:g}"
+    if args.fur_density != 0.35:
+        run_suffix += f"-density{args.fur_density:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -575,13 +626,26 @@ def main() -> int:
     log(f"Run output dir: {output_root}")
     log(f"Depth source: {args.depth_source}")
     log(f"Mask prompt: {args.mask_box if args.mask_box is not None else 'center point'}")
+    log(f"Stroke rasterizer: {args.stroke_rasterizer}")
+    log(f"Stroke width scale: {args.stroke_width_scale:g}")
+    log(f"Fur density: {args.fur_density:g}")
     log(f"Discovered {len(images)} image(s)")
     for image_path in images:
         log(f" - {image_path.name}")
 
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "run_config.json").write_text(
-        json.dumps({"image": args.image, "depth_source": args.depth_source, "mask_box": args.mask_box}, indent=2),
+        json.dumps(
+            {
+                "image": args.image,
+                "depth_source": args.depth_source,
+                "mask_box": args.mask_box,
+                "stroke_rasterizer": args.stroke_rasterizer,
+                "stroke_width_scale": args.stroke_width_scale,
+                "fur_density": args.fur_density,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
 
@@ -591,6 +655,9 @@ def main() -> int:
         output_root=output_root,
         depth_source=args.depth_source,
         mask_box=args.mask_box,
+        stroke_rasterizer=args.stroke_rasterizer,
+        stroke_width_scale=args.stroke_width_scale,
+        fur_density=args.fur_density,
     )
     runner.load_models()
 
