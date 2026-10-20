@@ -1,0 +1,17 @@
+# Local environment and generated files
+.DS_Store
+._*
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+model_cache/
+notebook_outputs/
+outputs/
+*.pth
+*.pt
+*.safetensors
+
+# Course input photos are local test data until their reuse rights are confirmed.
+image_folder/*
+!image_folder/.gitkeep
