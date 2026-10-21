@@ -50,15 +50,17 @@ python fur_rendering_batch.py --image mug9.jpg --depth-source float --mask-box 3
 
 The optional defaults are `legacy`, width scale `1`, and density `0.35`. Running without the new options reproduced the prior final PNG byte for byte. The comparison images, exact settings and limitations are in [the stroke experiment record](docs/stroke-experiment-2026-10-20.md). Generated images remain local and Git-ignored until a version is approved for release.
 
-## Cup-interior region control
+## Cup inner-wall control
 
-An optional same-size grayscale `--exclude-mask` keeps white-marked pixels free of fur. This local experiment uses hand-placed masks for the visible cup interiors of `mug3.jpg` and `mug1.jpg`; it does not automatically find those regions. On both tested images, the opening is easier to read. Use the mask matching the selected photo:
+The earlier `--exclude-mask` test removed fur from the entire cup interior. Yifan identified the resulting ceramic rim, broken fur edge and unfurred inner wall as failures. The [original region experiment](docs/region-underlayer-experiment-2026-10-20.md) now records that rejected output accurately.
+
+For an image-specific correction, `--inner-wall-mask` keeps the visible cup interior in the fur region but styles it with shorter strands, feathered coverage, retained recess shading and fine fibres. The tracked masks are manually placed guides for `mug1.jpg` and `mug3.jpg`; they do not detect the inside of other cups automatically:
 
 ```bash
-python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --exclude-mask data/region-masks/mug3-interior.png
+python fur_rendering_batch.py --image mug1.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --inner-wall-mask data/region-masks/mug1-interior.png
 ```
 
-The optional `--underlayer-mode local` was tested against the original `flat` underlayer while keeping the other settings fixed. It had little visible effect on the final mug, so `flat` stays the default. See [the region and underlayer experiment](docs/region-underlayer-experiment-2026-10-20.md) for the A/B images, settings, measured checks and remaining rim and strand issues. These are unpublished local development results.
+See [the inner-wall correction record](docs/inner-wall-correction-2026-10-21.md) for full-size and rim-crop comparisons, exact settings and remaining visual problems. The optional `--underlayer-mode local` was also tested and had little visible effect, so `flat` remains the default. All of these results are unpublished local experiments.
 
 The [visual target](docs/visual-target.md) provisionally uses `mug3.jpg` as the development hero, with `mug1.jpg` as a second check and `mug9.jpg` as a challenge case. It records the reference figures, current baseline and a subjective review rubric.
 

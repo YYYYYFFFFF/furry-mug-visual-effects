@@ -18,7 +18,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 from segment_anything import SamPredictor, sam_model_registry
 from transformers import pipeline
 
@@ -127,6 +127,9 @@ class FurRenderingBatchRunner:
         fur_density: float,
         underlayer_mode: str,
         exclude_mask_path: Path | None,
+        inner_wall_mask_path: Path | None,
+        inner_wall_length_scale: float,
+        inner_wall_opacity: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -138,6 +141,9 @@ class FurRenderingBatchRunner:
         self.fur_density = fur_density
         self.underlayer_mode = underlayer_mode
         self.exclude_mask_path = exclude_mask_path
+        self.inner_wall_mask_path = inner_wall_mask_path
+        self.inner_wall_length_scale = inner_wall_length_scale
+        self.inner_wall_opacity = inner_wall_opacity
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -223,6 +229,17 @@ class FurRenderingBatchRunner:
             best_mask = masks[np.argmax(scores)]
             if self.mask_box is None and not bool(best_mask[center_y, center_x]):
                 raise ValueError("Image center is not inside the mug matte.")
+            inner_wall_region = np.zeros((height, width), dtype=bool)
+            if self.inner_wall_mask_path is not None:
+                with Image.open(self.inner_wall_mask_path) as inner_wall_image:
+                    inner_wall = np.asarray(inner_wall_image.convert("L"))
+                if inner_wall.shape != (height, width):
+                    raise ValueError("Inner-wall mask must match the selected image dimensions.")
+                inner_wall_region = (inner_wall > 127) & best_mask
+                if not np.any(inner_wall_region):
+                    raise ValueError("Inner-wall mask does not overlap the detected mug.")
+            inner_wall_weight = cv2.GaussianBlur(inner_wall_region.astype(np.float32), (0, 0), 3.0)
+            inner_wall_weight *= best_mask.astype(np.float32)
             excluded_region = np.zeros((height, width), dtype=bool)
             if self.exclude_mask_path is not None:
                 with Image.open(self.exclude_mask_path) as exclusion_image:
@@ -352,6 +369,9 @@ class FurRenderingBatchRunner:
                     length_variation = rng.uniform(0.6, 1.4)
                     base_length = rng.uniform(fur_length_min, fur_length_max)
                     length = base_length * length_variation * (0.7 + 0.3 * np.clip(root[2] / depth_scale, 0.0, 1.0))
+                    root_x = int(np.clip(round(float(root[0])), 0, width - 1))
+                    root_y = int(np.clip(round(float(root[1])), 0, height - 1))
+                    length *= 1.0 - (1.0 - self.inner_wall_length_scale) * inner_wall_weight[root_y, root_x]
                     root_positions.append(root)
                     root_normals.append(root_normal)
                     root_lengths.append(length)
@@ -462,6 +482,8 @@ class FurRenderingBatchRunner:
             fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
             fur_alpha = fur_alpha_blurred * mask + fur_alpha * (1 - mask)
             fur_alpha = np.clip(fur_alpha * 1.05, 0.0, 0.92)
+            if self.inner_wall_mask_path is not None:
+                fur_alpha *= 1.0 - (1.0 - self.inner_wall_opacity) * inner_wall_weight
             if self.exclude_mask_path is not None:
                 fur_alpha[excluded_region] = 0.0
             log(
@@ -491,6 +513,10 @@ class FurRenderingBatchRunner:
                 diffuse_underlayer = np.zeros_like(result_float)
                 for channel in range(3):
                     diffuse_underlayer[:, :, channel] = base_color[channel]
+            if self.inner_wall_mask_path is not None:
+                # Keep the source's recess shading beneath the shorter interior fur.
+                wall_weight_3d = inner_wall_weight[:, :, np.newaxis]
+                diffuse_underlayer = (1.0 - wall_weight_3d) * diffuse_underlayer + wall_weight_3d * image_float
             result_float = (1.0 - mask_3d) * result_float + mask_3d * diffuse_underlayer
             distance_from_edge = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
             distance_normalized = np.clip(distance_from_edge / 12.0, 0.0, 1.0)
@@ -503,7 +529,36 @@ class FurRenderingBatchRunner:
             alpha_3d = np.clip(fur_alpha, 0.0, 1.0)[:, :, np.newaxis]
             result_float = np.clip((1.0 - alpha_3d) * result_float + alpha_3d * fur_layer, 0.0, 1.0)
             final_image_uint8 = (result_float * 255).astype(np.uint8)
+            if self.inner_wall_mask_path is not None:
+                # Add fine image-space fibres to the recessed wall, where projected mesh
+                # strands alone leave smooth patches. Feather strokes at the guide edge.
+                fibre_overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                draw_fibres = ImageDraw.Draw(fibre_overlay)
+                inner_y, inner_x = np.where(inner_wall_region)
+                detail_rng = np.random.default_rng(131)
+                root_indices = detail_rng.integers(0, len(inner_x), size=int(len(inner_x) * 0.18))
+                for root_index in root_indices:
+                    x, y = int(inner_x[root_index]), int(inner_y[root_index])
+                    brightness = detail_rng.uniform(0.73, 1.28)
+                    fibre_color = tuple(
+                        np.clip(final_image_uint8[y, x].astype(float) * brightness, 0, 255)
+                        .astype(np.uint8)
+                        .tolist()
+                    )
+                    length = int(detail_rng.integers(2, 5))
+                    dx = int(detail_rng.integers(-2, 3))
+                    draw_fibres.line((x, y, x + dx, y + length), fill=(*fibre_color, 145), width=1)
+                feathered_region = Image.fromarray((inner_wall_region * 255).astype(np.uint8)).filter(
+                    ImageFilter.GaussianBlur(1.0)
+                )
+                fibre_overlay.putalpha(ImageChops.multiply(fibre_overlay.getchannel("A"), feathered_region))
+                final_image_uint8 = np.asarray(
+                    Image.alpha_composite(Image.fromarray(final_image_uint8).convert("RGBA"), fibre_overlay)
+                    .convert("RGB")
+                )
             Image.fromarray(final_image_uint8).save(final_output_path)
+            if self.inner_wall_mask_path is not None:
+                result_float = final_image_uint8.astype(np.float32) / 255.0
             log(f"[{index}/{total}] Stage 6/7 complete: {stage_elapsed_message(stage_started)}")
 
             # Stage 7: full pipeline
@@ -592,6 +647,24 @@ def parse_args() -> argparse.Namespace:
         help="Exclude white pixels in a same-size grayscale mask from fur; requires --image.",
     )
     parser.add_argument(
+        "--inner-wall-mask",
+        type=Path,
+        default=None,
+        help="Style white pixels as a furry inner wall; requires --image and cannot combine with --exclude-mask.",
+    )
+    parser.add_argument(
+        "--inner-wall-length-scale",
+        type=float,
+        default=0.45,
+        help="Scale strand length inside --inner-wall-mask; default 0.45.",
+    )
+    parser.add_argument(
+        "--inner-wall-opacity",
+        type=float,
+        default=0.70,
+        help="Scale fur coverage over the inner wall; default 0.70.",
+    )
+    parser.add_argument(
         "--stroke-rasterizer",
         choices=("legacy", "aa8"),
         default="legacy",
@@ -626,6 +699,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--mask-box requires --image so the coordinates apply to one input.")
     if args.exclude_mask is not None and args.image is None:
         parser.error("--exclude-mask requires --image so the mask applies to one input.")
+    if args.inner_wall_mask is not None and args.image is None:
+        parser.error("--inner-wall-mask requires --image so the mask applies to one input.")
+    if args.inner_wall_mask is not None and args.exclude_mask is not None:
+        parser.error("--inner-wall-mask and --exclude-mask cannot be combined.")
     return args
 
 
@@ -636,6 +713,10 @@ def main() -> int:
         raise ValueError("--stroke-width-scale must be a positive finite number")
     if not np.isfinite(args.fur_density) or args.fur_density <= 0:
         raise ValueError("--fur-density must be a positive finite number")
+    if not np.isfinite(args.inner_wall_length_scale) or not 0 < args.inner_wall_length_scale <= 1:
+        raise ValueError("--inner-wall-length-scale must be between 0 and 1")
+    if not np.isfinite(args.inner_wall_opacity) or not 0 < args.inner_wall_opacity <= 1:
+        raise ValueError("--inner-wall-opacity must be between 0 and 1")
     project_root = Path(__file__).resolve().parent
     image_dir = (project_root / "image_folder").resolve()
     output_base_dir = (project_root / "outputs").resolve()
@@ -645,6 +726,12 @@ def main() -> int:
         exclude_mask_path = exclude_mask_path.resolve()
         if not exclude_mask_path.is_file():
             raise ValueError(f"Exclude mask not found: {exclude_mask_path}")
+    inner_wall_mask_path = None
+    if args.inner_wall_mask is not None:
+        inner_wall_mask_path = args.inner_wall_mask if args.inner_wall_mask.is_absolute() else project_root / args.inner_wall_mask
+        inner_wall_mask_path = inner_wall_mask_path.resolve()
+        if not inner_wall_mask_path.is_file():
+            raise ValueError(f"Inner-wall mask not found: {inner_wall_mask_path}")
     run_timestamp = make_run_timestamp()
     run_suffix = "-box" if args.mask_box is not None else ""
     if args.stroke_rasterizer == "aa8":
@@ -657,6 +744,8 @@ def main() -> int:
         run_suffix += f"-underlayer-{args.underlayer_mode}"
     if exclude_mask_path is not None:
         run_suffix += "-exclude"
+    if inner_wall_mask_path is not None:
+        run_suffix += f"-innerwall{args.inner_wall_length_scale:g}-opacity{args.inner_wall_opacity:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -684,6 +773,9 @@ def main() -> int:
     log(f"Fur density: {args.fur_density:g}")
     log(f"Underlayer mode: {args.underlayer_mode}")
     log(f"Exclude mask: {exclude_mask_path if exclude_mask_path is not None else 'none'}")
+    log(f"Inner-wall mask: {inner_wall_mask_path if inner_wall_mask_path is not None else 'none'}")
+    log(f"Inner-wall length scale: {args.inner_wall_length_scale:g}")
+    log(f"Inner-wall opacity: {args.inner_wall_opacity:g}")
     log(f"Discovered {len(images)} image(s)")
     for image_path in images:
         log(f" - {image_path.name}")
@@ -700,6 +792,9 @@ def main() -> int:
                 "fur_density": args.fur_density,
                 "underlayer_mode": args.underlayer_mode,
                 "exclude_mask": str(args.exclude_mask) if args.exclude_mask is not None else None,
+                "inner_wall_mask": str(args.inner_wall_mask) if args.inner_wall_mask is not None else None,
+                "inner_wall_length_scale": args.inner_wall_length_scale,
+                "inner_wall_opacity": args.inner_wall_opacity,
             },
             indent=2,
         ),
@@ -717,6 +812,9 @@ def main() -> int:
         fur_density=args.fur_density,
         underlayer_mode=args.underlayer_mode,
         exclude_mask_path=exclude_mask_path,
+        inner_wall_mask_path=inner_wall_mask_path,
+        inner_wall_length_scale=args.inner_wall_length_scale,
+        inner_wall_opacity=args.inner_wall_opacity,
     )
     runner.load_models()
 
