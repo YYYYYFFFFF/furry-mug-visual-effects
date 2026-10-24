@@ -24,6 +24,7 @@ from segment_anything import SamPredictor, sam_model_registry
 from transformers import pipeline
 
 from fur_strokes import FineFurCanvas, repair_aa_color
+from matte_refinement import close_matte_gaps
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -136,6 +137,9 @@ class FurRenderingBatchRunner:
         fur_finish: str,
         supersample: int,
         tip_environment_blend: float,
+        matte_close_radius: int,
+        fill_fur_gaps: bool,
+        fur_alpha_cap: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -153,6 +157,9 @@ class FurRenderingBatchRunner:
         self.fur_finish = fur_finish
         self.supersample = supersample
         self.tip_environment_blend = tip_environment_blend
+        self.matte_close_radius = matte_close_radius
+        self.fill_fur_gaps = fill_fur_gaps
+        self.fur_alpha_cap = fur_alpha_cap
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -238,6 +245,16 @@ class FurRenderingBatchRunner:
             best_mask = masks[np.argmax(scores)]
             if self.mask_box is None and not bool(best_mask[center_y, center_x]):
                 raise ValueError("Image center is not inside the mug matte.")
+            if self.matte_close_radius:
+                raw_mask = best_mask.copy()
+                best_mask = close_matte_gaps(best_mask, self.matte_close_radius)
+                added = best_mask & ~raw_mask
+                Image.fromarray(raw_mask.astype(np.uint8) * 255).save(
+                    self.output_root / f"{output_prefix}_matte_raw.png")
+                Image.fromarray(added.astype(np.uint8) * 255).save(
+                    self.output_root / f"{output_prefix}_matte_added.png")
+                log(f"[{index}/{total}] Matte repair: added {int(added.sum())} pixels "
+                    f"with radius {self.matte_close_radius}")
             inner_wall_region = np.zeros((height, width), dtype=bool)
             if self.inner_wall_mask_path is not None:
                 with Image.open(self.inner_wall_mask_path) as inner_wall_image:
@@ -497,6 +514,9 @@ class FurRenderingBatchRunner:
                 fur_layer = fur_layer.astype(np.float32) / 255.0
                 fur_alpha = fur_alpha.astype(np.float32) / 255.0
             if fine_canvas is not None:
+                if self.fill_fur_gaps:
+                    count = fine_canvas.add_underfur(image_float, normal_image)
+                    log(f"[{index}/{total}] Coverage repair: {count} short backing fibres")
                 fur_layer, fur_alpha = fine_canvas.finish()
                 log(f"[{index}/{total}] Fine fur: {self.supersample}x canvas; "
                     f"{fine_canvas.tinted_segments} segments received exterior tip tint")
@@ -508,7 +528,7 @@ class FurRenderingBatchRunner:
                     fur_layer = np.clip(0.85 * fur_layer + 0.15 * fur_layer_blurred, 0.0, 1.0)
                 fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
                 fur_alpha = fur_alpha_blurred * mask + fur_alpha * (1 - mask)
-            fur_alpha = np.clip(fur_alpha * 1.05, 0.0, 0.92)
+            fur_alpha = np.clip(fur_alpha * 1.05, 0.0, self.fur_alpha_cap)
             if self.inner_wall_mask_path is not None:
                 fur_alpha *= 1.0 - (1.0 - self.inner_wall_opacity) * inner_wall_weight
             if self.exclude_mask_path is not None:
@@ -732,6 +752,18 @@ def parse_args() -> argparse.Namespace:
         help="Mix 0 to 0.3 of nearby background colour into exterior tips; fine finish only.",
     )
     parser.add_argument(
+        "--fur-alpha-cap", type=float, default=0.92,
+        help="Maximum fur opacity in (0, 1]; 1 lets dense fibres fully cover the backing.",
+    )
+    parser.add_argument(
+        "--matte-close-radius", type=int, choices=range(0, 11), default=0,
+        help="Opt-in additive mask closing radius in pixels; inspect saved raw/added masks.",
+    )
+    parser.add_argument(
+        "--fill-fur-gaps", action="store_true",
+        help="Add short backing fibres only under sparse object coverage; requires fine finish.",
+    )
+    parser.add_argument(
         "--fur-density",
         type=float,
         default=0.35,
@@ -758,6 +790,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--inner-wall-mask requires --image so the mask applies to one input.")
     if args.inner_wall_mask is not None and args.exclude_mask is not None:
         parser.error("--inner-wall-mask and --exclude-mask cannot be combined.")
+    if not np.isfinite(args.fur_alpha_cap) or not 0 < args.fur_alpha_cap <= 1:
+        parser.error("--fur-alpha-cap must be finite and in (0, 1].")
+    if args.fill_fur_gaps and args.fur_finish != "fine":
+        parser.error("--fill-fur-gaps requires --fur-finish fine.")
     if args.fur_finish != "original" and args.stroke_rasterizer != "aa8":
         parser.error("--fur-finish alpha/fine requires --stroke-rasterizer aa8.")
     if args.tip_environment_blend != 0 and args.fur_finish != "fine":
@@ -811,6 +847,12 @@ def main() -> int:
         run_suffix += "-alpha"
     elif args.fur_finish == "fine":
         run_suffix += f"-fine{args.supersample}-env{args.tip_environment_blend:g}"
+    if args.matte_close_radius:
+        run_suffix += f"-close{args.matte_close_radius}"
+    if args.fill_fur_gaps:
+        run_suffix += "-fillgaps"
+    if args.fur_alpha_cap != 0.92:
+        run_suffix += f"-cap{args.fur_alpha_cap:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -859,6 +901,10 @@ def main() -> int:
                 "fur_finish": args.fur_finish,
                 "supersample": args.supersample,
                 "tip_environment_blend": args.tip_environment_blend,
+                "matte_close_radius": args.matte_close_radius,
+                "fill_fur_gaps": args.fill_fur_gaps,
+                "fur_alpha_cap": args.fur_alpha_cap,
+                "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
                 "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "fur_strokes_sha256": hashlib.sha256((project_root / "fur_strokes.py").read_bytes()).hexdigest(),
                 "underlayer_mode": args.underlayer_mode,
@@ -889,6 +935,9 @@ def main() -> int:
         fur_finish=args.fur_finish,
         supersample=args.supersample,
         tip_environment_blend=args.tip_environment_blend,
+        matte_close_radius=args.matte_close_radius,
+        fill_fur_gaps=args.fill_fur_gaps,
+        fur_alpha_cap=args.fur_alpha_cap,
     )
     runner.load_models()
 

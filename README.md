@@ -82,6 +82,18 @@ See [the fine-fur experiment](docs/fine-fur-experiment-2026-10-24.md) for exact 
 
 The [visual target](docs/visual-target.md) now uses `mug1.jpg` and the user-selected `120024` result, with `mug3.jpg` as a second check and `mug9.jpg` as a later challenge case. The current candidate uses neither exclusion nor inner-wall guide masks.
 
+## Matte gaps and sparse coverage
+
+Yifan's review of the mug3 `200110` result found a missing patch at the lower handle joint. The raw SAM matte excluded real cup pixels there; the underlayer and hair roots inherited that defect. Fine strands also exposed sparse coverage elsewhere. Optional repairs now let you close small mask defects and add short fibres behind under-covered object pixels:
+
+```bash
+.venv/bin/python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --fur-finish fine --underlayer-mode fur --tip-environment-blend 0.12 --matte-close-radius 5 --fill-fur-gaps --fur-alpha-cap 1
+```
+
+`--matte-close-radius` defaults to `0` (off) and saves raw/added-pixel masks for inspection. Radius 5 was reviewed on this 602px mug3 input; small genuine openings can also close at that scale, so this is not an automatic semantic repair for every image. `--fill-fur-gaps` requires the fine finish and adds short backing fibres only inside sparse object coverage. `--fur-alpha-cap 1` allows dense fur to fully hide the backing; its default remains `0.92` for compatibility. Low-coverage tips still fade.
+
+See [the gap investigation and controlled comparisons](docs/coverage-repair-2026-10-24.md). The previous `200110` output remains reproducible with the old parameters. All new results are local experiments awaiting review.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.

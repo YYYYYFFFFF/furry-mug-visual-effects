@@ -50,3 +50,7 @@ The [region experiment](region-underlayer-experiment-2026-10-20.md) and [inner-w
 The 24 October candidate makes the silhouette finer and substantially reduces the gray fringe on the two rendered mugs. Transparent tapered tips provide most of the softness; nearby environment tint is a restrained finishing adjustment. Fine rendering initially exposed pale gaps over the flat backing, so the candidate uses a locally averaged fur-colour undercoat. This differs from the earlier source-colour underlayer test, which had little visible effect.
 
 Yifan has not yet reviewed this candidate. The surface is still dense in places, the inner wall remains coarse/dark, and some rim strands look long or brush-like. Assess those limits against the accepted baseline before further changes. No result has passed the subjective gate above, and no similarity percentage has been established.
+
+## Follow-up: user review of mug3 coverage
+
+Yifan found visible gaps in `200110`, particularly where the lower handle meets the body, and pointed to the underlayer and matte. A layer-by-layer investigation confirmed that the matte omitted cup pixels there. Sparse fine-fur coverage is a separate issue. See [the corrective experiment](coverage-repair-2026-10-24.md) for repaired masks, local backing fibres, opacity-cap comparisons and the remaining directional band on the right side. The earlier whole-image assessment did not validate these details.

@@ -1,6 +1,6 @@
 # Fine fur, alpha correction and environment-tinted tips
 
-Date: 24 October 2026. Status: agent-assisted local development experiment, awaiting Yifan's visual review. No new GitHub release.
+Date: 24 October 2026. Status: agent-assisted local development experiment. In a subsequent review, Yifan identified sparse fur and a missing lower handle-joint patch in mug3 `200110`. The findings and corrective runs are in [the gap investigation](coverage-repair-2026-10-24.md). The initial full-frame transfer check did not establish clean close-up coverage. No new GitHub release.
 
 ## Target and controls
 

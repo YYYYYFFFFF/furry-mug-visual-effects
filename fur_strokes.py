@@ -133,3 +133,46 @@ class FineFurCanvas:
         premultiplied = cv2.resize(self.rgb, size, interpolation=cv2.INTER_AREA)
         alpha = cv2.resize(self.alpha, size, interpolation=cv2.INTER_AREA)
         return straight_color(premultiplied, alpha), np.clip(alpha, 0.0, 1.0)
+
+    def add_underfur(self, image: np.ndarray, normal_image: np.ndarray) -> int:
+        """Place short fibres behind sparse coverage, clipped to the object.
+
+        The primary strands, their exterior tips and already-covered pixels are
+        preserved. A separate RNG keeps this optional pass reproducible.
+        """
+        color, coverage = self.finish()
+        sparse = self.object_mask & (coverage < 0.8)
+        ys, xs = np.where(sparse)
+        if not len(xs):
+            return 0
+        weight = coverage * self.object_mask
+        color_sum = cv2.GaussianBlur(color * weight[..., None], (0, 0), 2.0)
+        local_weight = cv2.GaussianBlur(weight, (0, 0), 2.0)
+        fallback = np.clip(image * 0.75, 0, 1)
+        local_color = np.divide(color_sum, local_weight[..., None], out=fallback.copy(),
+                                where=local_weight[..., None] > 1e-5)
+        underfur = FineFurCanvas(image, self.object_mask, self.width_scale, self.scale, 0.0)
+        rng = np.random.default_rng(20261024)
+        for index, (x, y) in enumerate(zip(xs, ys)):
+            normal = normal_image[y, x, :2] * 2.0 - 1.0
+            angle = np.arctan2(normal[1], normal[0]) + rng.uniform(-1.1, 1.1)
+            direction = np.array([np.cos(angle), np.sin(angle)], dtype=np.float32)
+            length = rng.uniform(2.0, 4.0)
+            start = np.array([x, y], dtype=np.float32) + rng.uniform(-0.4, 0.4, 2)
+            hair = np.zeros((5, 3), dtype=np.float32)
+            hair[:, :2] = start + np.linspace(0, length, 5)[:, None] * direction
+            brightness = rng.uniform(0.85, 1.15)
+            strand_color = np.clip(local_color[y, x] * brightness, 0, 1)
+            colors = np.tile(strand_color, (4, 1))
+            underfur.draw_strand(hair, colors, index)
+        # Restrict the backing fibres to under-covered object pixels. The main
+        # silhouette, handle opening and environment-tinted tips stay untouched.
+        support = cv2.resize(sparse.astype(np.uint8),
+                             (self.width * self.scale, self.height * self.scale),
+                             interpolation=cv2.INTER_NEAREST)
+        underfur.rgb *= support[..., None]
+        underfur.alpha *= support
+        remaining = 1.0 - self.alpha
+        self.rgb += remaining[..., None] * underfur.rgb
+        self.alpha += remaining * underfur.alpha
+        return len(xs)
