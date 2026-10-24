@@ -53,3 +53,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s tests -v
 ```
 
 Only mug3 has been rendered with this new ordering mode. `generation` remains the default; previous results, tags and output folders are intact. Model weights, generated results and reference PDF remain Git-ignored. A public/release version is not created by this local development commit.
+
+## Subsequent user review
+
+Yifan judged the other areas well optimized and requested only denser-looking fur around the outer lip. The following [local rim finish](rim-detail-2026-10-24.md) uses this exact depth-order image as the accepted base and preserves every final pixel outside its narrow rim band.

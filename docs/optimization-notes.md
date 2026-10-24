@@ -14,11 +14,13 @@ A subsequent close-up review found a lower handle-joint segmentation gap and spa
 
 The [depth-order comparison](depth-order-2026-10-24.md) then isolated a major cause of the remaining right-side smooth strip: traversal-order overpainting suppresses visible strand detail. Optional root-depth ordering improves that edge on mug3 with identical saved matte/alpha and unchanged primary strands. It also changes body/rim texture; review the whole image. Generalized direction/length or lighting refinement remains separate work.
 
-## Next decisions
+## Current scope and next decisions
 
-1. **Review the new mug3 repair beside `200110`, and retain `120024` as the mug1 appearance baseline.** Inspect the full image and enlarged right edge, rim, handle joint and body, including the latest optional depth-order candidate. The main gain is finer strand rendering and correct edge compositing; tint alone is a small change. Results and exact source hashes are saved locally, with no release yet.
-2. **Refine remaining dense material and rim direction if needed.** The central surface and inner wall can still read as dense fibres; some rim strands are brush-like. Local direction/length and shading need separate controlled comparisons. Keep density fixed initially, given the earlier low-density failure.
-3. **Check harder inputs after selecting a finish.** The fine finish has only been checked on two simple-background mugs. Patterned `mug9.jpg`, imperfect mattes and detailed backgrounds need their own evaluation. Optional combinations with inner-wall guides have not been evaluated with the new finish.
-4. **Prepare an approved result archive and concise case study.** Once Yifan approves a version, bundle its code tag, settings, inputs/model identifiers and generated results under the agreed release name. Show a failure and the actual corrective iteration; credit the paper and pretrained models. Local commits are not releases.
+Yifan has now reviewed the mug3 depth-order result and identified only the outer lip as still sparse, judging the other areas good. The [local rim-finishing experiment](rim-detail-2026-10-24.md) therefore preserves that result outside a narrow guided band. Earlier notes about dense bodies or dark interiors are historical observations, not instructions to change those accepted areas.
 
-Do not describe proposed techniques as implemented or claim an achieved similarity percentage without supporting review.
+1. **Review the outer rim against the accepted depth-order base.** Use the saved front-lip and opening comparisons. All final pixels outside the rim support are identical; review whether the new short-fibre texture is dense enough without losing the lip's shape.
+2. **Preserve the accepted remainder.** Do not change the body, handle, right edge or deeper interior during this refinement. Broader direction, lighting and density changes need a new user request.
+3. **Generalize only when requested.** The newest depth-order and rim-detail modes have been visually evaluated on mug3. Other inputs need separate checks and an appropriately aligned rim guide.
+4. **Archive an approved version when requested.** Keep local commits and results traceable. Publish the agreed tag/result bundle only after the relevant release approval; development commits are not releases.
+
+Do not claim an achieved reference-similarity percentage without supporting review.

@@ -25,6 +25,7 @@ from transformers import pipeline
 
 from fur_strokes import FineFurCanvas, depth_ordered_strands, repair_aa_color
 from matte_refinement import close_matte_gaps
+from fur_rim import apply_rim_detail
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -141,6 +142,8 @@ class FurRenderingBatchRunner:
         fill_fur_gaps: bool,
         fur_alpha_cap: float,
         fur_order: str,
+        rim_guide_mask_path: Path | None,
+        rim_detail_strength: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -162,6 +165,8 @@ class FurRenderingBatchRunner:
         self.fill_fur_gaps = fill_fur_gaps
         self.fur_alpha_cap = fur_alpha_cap
         self.fur_order = fur_order
+        self.rim_guide_mask_path = rim_guide_mask_path
+        self.rim_detail_strength = rim_detail_strength
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -201,6 +206,13 @@ class FurRenderingBatchRunner:
             image_np = np.array(image)
             height, width = image_np.shape[:2]
             log(f"[{index}/{total}] Loaded image with size {width} x {height}")
+
+            rim_guide = None
+            if self.rim_guide_mask_path is not None:
+                with Image.open(self.rim_guide_mask_path) as guide_image:
+                    rim_guide = np.asarray(guide_image.convert("L")) > 127
+                if rim_guide.shape != (height, width) or not rim_guide.any() or rim_guide.all():
+                    raise ValueError("Rim opening guide must match the image and contain both regions.")
 
             # Stage 1: depth map
             log(f"[{index}/{total}] Stage 1/7: estimating depth map")
@@ -633,8 +645,23 @@ class FurRenderingBatchRunner:
                     Image.alpha_composite(Image.fromarray(final_image_uint8).convert("RGBA"), fibre_overlay)
                     .convert("RGB")
                 )
+            if rim_guide is not None:
+                Image.fromarray(final_image_uint8).save(
+                    self.output_root / f"{output_prefix}_before_rim_detail.png")
+                # Use the same quantized coverage as the saved diagnostic alpha,
+                # so a local finishing preview can be reproduced exactly.
+                rim_coverage = (fur_alpha * 255).astype(np.uint8).astype(np.float32) / 255.0
+                final_image_uint8, detail_alpha, rim_support, count = apply_rim_detail(
+                    final_image_uint8, rim_guide, rim_coverage,
+                    self.rim_detail_strength, self.supersample)
+                Image.fromarray((detail_alpha * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_rim_detail_alpha.png")
+                Image.fromarray((rim_support * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_rim_support.png")
+                log(f"[{index}/{total}] Rim finish: {count} short fibres; "
+                    f"strength {self.rim_detail_strength:g}")
             Image.fromarray(final_image_uint8).save(final_output_path)
-            if self.inner_wall_mask_path is not None:
+            if self.inner_wall_mask_path is not None or rim_guide is not None:
                 result_float = final_image_uint8.astype(np.float32) / 255.0
             log(f"[{index}/{total}] Stage 6/7 complete: {stage_elapsed_message(stage_started)}")
 
@@ -766,6 +793,14 @@ def parse_args() -> argparse.Namespace:
         help="Mix 0 to 0.3 of nearby background colour into exterior tips; fine finish only.",
     )
     parser.add_argument(
+        "--rim-guide-mask", type=Path, default=None,
+        help="Image-specific white opening guide; add local outer-rim detail around its boundary.",
+    )
+    parser.add_argument(
+        "--rim-detail-strength", type=float, default=0.75,
+        help="Strength of guided local rim finishing in [0, 1]; requires a rim guide to have effect.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -810,6 +845,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--inner-wall-mask and --exclude-mask cannot be combined.")
     if not np.isfinite(args.fur_alpha_cap) or not 0 < args.fur_alpha_cap <= 1:
         parser.error("--fur-alpha-cap must be finite and in (0, 1].")
+    if args.rim_guide_mask is not None and (args.image is None or args.fur_finish != "fine"):
+        parser.error("--rim-guide-mask requires --image and --fur-finish fine.")
+    if not np.isfinite(args.rim_detail_strength) or not 0 <= args.rim_detail_strength <= 1:
+        parser.error("--rim-detail-strength must be finite and between 0 and 1.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -849,6 +888,12 @@ def main() -> int:
         inner_wall_mask_path = inner_wall_mask_path.resolve()
         if not inner_wall_mask_path.is_file():
             raise ValueError(f"Inner-wall mask not found: {inner_wall_mask_path}")
+    rim_guide_mask_path = None
+    if args.rim_guide_mask is not None:
+        rim_guide_mask_path = args.rim_guide_mask if args.rim_guide_mask.is_absolute() else project_root / args.rim_guide_mask
+        rim_guide_mask_path = rim_guide_mask_path.resolve()
+        if not rim_guide_mask_path.is_file():
+            raise ValueError(f"Rim guide mask not found: {rim_guide_mask_path}")
     run_timestamp = make_run_timestamp()
     run_suffix = "-box" if args.mask_box is not None else ""
     if args.stroke_rasterizer == "aa8":
@@ -875,6 +920,8 @@ def main() -> int:
         run_suffix += f"-cap{args.fur_alpha_cap:g}"
     if args.fur_order != "generation":
         run_suffix += f"-order{args.fur_order}"
+    if rim_guide_mask_path is not None:
+        run_suffix += f"-rim{args.rim_detail_strength:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -927,6 +974,10 @@ def main() -> int:
                 "fill_fur_gaps": args.fill_fur_gaps,
                 "fur_alpha_cap": args.fur_alpha_cap,
                 "fur_order": args.fur_order,
+                "rim_guide_mask": str(args.rim_guide_mask) if args.rim_guide_mask is not None else None,
+                "rim_guide_sha256": hashlib.sha256(rim_guide_mask_path.read_bytes()).hexdigest() if rim_guide_mask_path is not None else None,
+                "rim_detail_strength": args.rim_detail_strength,
+                "fur_rim_sha256": hashlib.sha256((project_root / "fur_rim.py").read_bytes()).hexdigest(),
                 "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
                 "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "fur_strokes_sha256": hashlib.sha256((project_root / "fur_strokes.py").read_bytes()).hexdigest(),
@@ -962,6 +1013,8 @@ def main() -> int:
         fill_fur_gaps=args.fill_fur_gaps,
         fur_alpha_cap=args.fur_alpha_cap,
         fur_order=args.fur_order,
+        rim_guide_mask_path=rim_guide_mask_path,
+        rim_detail_strength=args.rim_detail_strength,
     )
     runner.load_models()
 

@@ -55,4 +55,8 @@ Yifan has not yet reviewed this candidate. The surface is still dense in places,
 
 Yifan found visible gaps in `200110`, particularly where the lower handle meets the body, and pointed to the underlayer and matte. A layer-by-layer investigation confirmed that the matte omitted cup pixels there. Sparse fine-fur coverage is a separate issue. See [the corrective experiment](coverage-repair-2026-10-24.md) for repaired masks, local backing fibres, opacity-cap comparisons and the remaining directional band on the right side. The earlier whole-image assessment did not validate these details.
 
-The later [depth-order candidate](depth-order-2026-10-24.md) addresses the right-edge smooth strip through strand overlap order. A full mug3 rerender retains identical matte and alpha while exposing more fine-fibre detail. This is still pending Yifan's review, and mug1's selected appearance baseline remains `120024`.
+The later [depth-order candidate](depth-order-2026-10-24.md) addresses the right-edge smooth strip through strand overlap order. A full mug3 rerender retains identical matte and alpha while exposing more fine-fibre detail. Yifan subsequently judged the rest of this mug3 result good and requested refinement only of its outer rim. Mug1's earlier selected appearance baseline remains `120024`.
+
+## Current scope after the latest review
+
+Yifan explicitly identified the outer lip as the only remaining requested issue in the mug3 depth-order result and said the other parts were well optimized. Use that exact `204114-...-orderdepth` result as the base for this local refinement. The [rim-detail candidate](rim-detail-2026-10-24.md) changes only a narrow guided rim band, with pixel-exact preservation outside it. Further changes to body, handle, right edge or deeper interior are outside the present request. The new lip texture still needs visual review; this does not set a release name or authorize publication.

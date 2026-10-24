@@ -104,6 +104,16 @@ The repaired mug3 still showed a smooth, apparently bald strip at the right edge
 
 This option requires the fine finish. `generation` remains the default and reproduces the previous image. Depth order uses each root's estimated relative depth, not full per-pixel 3D visibility, and changes overlap across the whole object. See [the ordering investigation](docs/depth-order-2026-10-24.md) for edge, rim, joint and body comparisons. The new mode has been visually evaluated on mug3 only and is awaiting user review.
 
+## Local outer-rim detail
+
+Yifan accepted the depth-order result outside the outer lip and requested denser-looking fur only around that rim. Optional guided finishing adds short, curved, interleaved fibres inside a feathered boundary band. It preserves all final pixels outside that band exactly. Add these options to the mug3 depth-order command above:
+
+```bash
+--rim-guide-mask data/region-masks/mug3-interior.png --rim-detail-strength 0.75
+```
+
+The existing white opening ellipse is reused solely as a placement guide; this does not enable `--inner-wall-mask` styling. `fur_rim.py` performs the local finishing after the accepted primary composite. It saves the pre-finish image, rim support and added alpha so the edit's scope can be checked. This is an image-specific guided effect, not automatic rim detection. See [the rim-detail experiment](docs/rim-detail-2026-10-24.md) for the actual run, narrow-band comparisons and pixel-preservation checks. Without a rim guide, the finishing pass is disabled.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.
