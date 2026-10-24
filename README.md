@@ -19,6 +19,22 @@ python fur_rendering_batch.py --limit 1
 
 Put one or more `.jpg` or `.png` inputs in `image_folder/`. The original input set and its checksums are stored separately from the program in [data/input-images/](data/README.md); copy the images you want to test into `image_folder/` after cloning. The v2 batch script saves results in timestamped folders under `outputs/`, with the selected settings recorded in each folder’s `run_config.json`. `Final_Project.ipynb` still contains the course baseline pipeline and has not received the v2 depth change. The four notebooks in `experiments/` document earlier method exploration and include Colab-specific code; they are not the main entry point. Notebook execution outputs were removed from these copies, while code cells were retained.
 
+## Test every current mug with the refined finish
+
+The reusable batch preset is `presets/fine-fur-b.json`, based on the last recommended B shading (coherent strand contrast and soft highlights). It records image-specific SAM boxes and manual opening guides, alongside shared rendering settings:
+
+```bash
+.venv/bin/python render_collection.py
+# Optional repeat of one current input:
+.venv/bin/python render_collection.py --image mug3.jpg
+```
+
+The runner loads the models once, then creates one timestamped `outputs/<timestamp>-all-mugs-fine-b/` folder with a subfolder per mug, an incremental `batch_summary.json`, `all-mugs-overview.png`, and an `index.html` original/result gallery. The per-image folders include final PNGs, pipeline views, diagnostic layers and exact settings. The top-level configuration records input/source/model hashes. Existing paths are never reused by the batch runner.
+
+The current set contains ten images. Mug5 and mug7 use manually reviewed object boxes after the centre prompt missed the full object/handle; mug9 retains its previously tested box. Every visible opening has its own manually placed guide. Mug7 has no visible opening and skips guided rim finishing. These placements are specific to the supplied photographs; the preset does not automatically detect cup rims in new images. Add and review a placement entry before testing a new input.
+
+**Output cleanup, 25 October 2026:** at Yifan's explicit request, all previous local generated outputs and comparison records were deleted (350 files, 156,213,300 bytes). Historical experiment documents remain as code/change history, but their old `outputs/` links no longer resolve. The B configuration and its mug3 final checksum were retained in the new preset before cleanup. Source photos, renderer code, model cache and the local reference paper were preserved. See [the full-set test record](docs/all-mugs-2026-10-25.md) for the new results.
+
 ## First v2 experiment: depth precision
 
 The batch script now uses the model's full-precision `predicted_depth` for surface geometry by default. Use `--depth-source preview8` to reproduce the original script's 8-bit depth input. On the same input, compare the normal map, fur layer and final composite from these two runs. Each run's output directory ends with its depth source:

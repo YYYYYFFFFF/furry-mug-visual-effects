@@ -1,0 +1,223 @@
+{
+  "schema": 1,
+  "description": "Batch preset based on recommended B shading; per-image manual guides and SAM boxes. No published release implied.",
+  "baseline_code_commit": "6555f0e979c968dc87b3c547db5047e56ec949af",
+  "baseline_mug3_final_sha256": "4e315db772c9ca7ee8dbca165a81ec99a9cb468165615a5a0f9d18439ea06e9d",
+  "shared": {
+    "depth_source": "float",
+    "mask_box": null,
+    "stroke_rasterizer": "aa8",
+    "stroke_width_scale": 0.5,
+    "fur_density": 0.35,
+    "underlayer_mode": "fur",
+    "inner_wall_length_scale": 0.45,
+    "inner_wall_opacity": 0.7,
+    "fur_finish": "fine",
+    "supersample": 4,
+    "tip_environment_blend": 0.12,
+    "matte_close_radius": 5,
+    "fill_fur_gaps": true,
+    "fur_alpha_cap": 1.0,
+    "fur_order": "depth",
+    "rim_detail_strength": 0.75,
+    "rear_rim_strength": 0.0,
+    "strand_contrast": 0.12,
+    "strand_highlight": 0.12,
+    "exclude_mask": null,
+    "inner_wall_mask": null,
+    "rim_guide_mask": null
+  },
+  "images": {
+    "mug1.jpg": {
+      "rim_guide_mask": "data/region-masks/mug1-interior.png",
+      "rear_rim_strength": 0.85,
+      "note": "Existing manually placed opening ellipse, used for rim finishing only."
+    },
+    "mug2.jpg": {
+      "rim_guide_mask": "data/region-masks/mug2-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        212,
+        150,
+        474,
+        173
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph."
+    },
+    "mug3.jpg": {
+      "rim_guide_mask": "data/region-masks/mug3-interior.png",
+      "rear_rim_strength": 0.85,
+      "note": "Existing manually placed opening ellipse, used for rim finishing only."
+    },
+    "mug4.jpg": {
+      "rim_guide_mask": "data/region-masks/mug4-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        150,
+        173,
+        458,
+        249
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph."
+    },
+    "mug5.jpg": {
+      "rim_guide_mask": "data/region-masks/mug5-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        134,
+        146,
+        454,
+        278
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph.",
+      "mask_box": [
+        110,
+        130,
+        575,
+        525
+      ],
+      "mask_note": "Centre SAM selected only a yellow stripe; full-object box includes handle."
+    },
+    "mug6.jpg": {
+      "rim_guide_mask": "data/region-masks/mug6-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        119,
+        198,
+        367,
+        234
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph."
+    },
+    "mug7.jpg": {
+      "note": "No visible opening in this frontal photo; guided rim passes disabled.",
+      "mask_box": [
+        70,
+        150,
+        580,
+        510
+      ],
+      "mask_note": "Centre SAM omitted handle; full-object box includes handle."
+    },
+    "mug8.jpg": {
+      "rim_guide_mask": "data/region-masks/mug8-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        153,
+        192,
+        444,
+        251
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph."
+    },
+    "mug9.jpg": {
+      "rim_guide_mask": "data/region-masks/mug9-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_ellipse_bbox": [
+        50,
+        124,
+        450,
+        158
+      ],
+      "note": "Manually placed opening ellipse for this 602px photograph.",
+      "mask_box": [
+        30,
+        75,
+        585,
+        560
+      ],
+      "mask_note": "Previously tested box for the patterned cup."
+    },
+    "mug10.jpg": {
+      "rim_guide_mask": "data/region-masks/mug10-opening.png",
+      "rear_rim_strength": 0.85,
+      "guide_polygon": [
+        [
+          177,
+          158
+        ],
+        [
+          181,
+          150
+        ],
+        [
+          216,
+          143
+        ],
+        [
+          267,
+          140
+        ],
+        [
+          290,
+          140
+        ],
+        [
+          300,
+          149
+        ],
+        [
+          309,
+          156
+        ],
+        [
+          365,
+          156
+        ],
+        [
+          409,
+          160
+        ],
+        [
+          441,
+          169
+        ],
+        [
+          451,
+          177
+        ],
+        [
+          444,
+          186
+        ],
+        [
+          416,
+          193
+        ],
+        [
+          368,
+          199
+        ],
+        [
+          339,
+          198
+        ],
+        [
+          328,
+          191
+        ],
+        [
+          316,
+          182
+        ],
+        [
+          301,
+          178
+        ],
+        [
+          259,
+          177
+        ],
+        [
+          222,
+          173
+        ],
+        [
+          194,
+          167
+        ]
+      ],
+      "note": "Manual approximation following irregular/notched rim; not a ground-truth interior segmentation."
+    }
+  }
+}

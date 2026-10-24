@@ -16,11 +16,11 @@ The [depth-order comparison](depth-order-2026-10-24.md) then isolated a major ca
 
 ## Current scope and next decisions
 
-Yifan accepted the rear-rim result and then authorized stronger fur texture through coherent strand brightness variation and restrained highlights. The previous restriction to rim-only changes applied to the completed rim refinement; the current request authorizes shading changes across the mug while retaining its geometry and coverage.
+Yifan judged the latest texture close to the desired state and requested deletion of previous local outputs followed by a test of every current cup. The [25 October collection test](all-mugs-2026-10-25.md) uses the recommended B settings and image-specific placement controls. All older generated outputs/comparison files were removed as requested; their dated experiment documents remain historical records.
 
-1. **Review texture contrast.** The [strand-lighting A/B experiment](strand-lighting-2026-10-24.md) compares the accepted baseline with per-strand contrast and optional soft glints. Inspect both native size and enlarged body detail.
-2. **Keep the accepted fur structure.** Density, thickness, geometry, alpha, soft tips and the rear-rim silhouette remain fixed. No undercoat darkening or global sharpening is part of this comparison.
-3. **Generalize only when requested.** Latest shading and guided-rim modes have been visually evaluated on mug3. Other images need separate checks and aligned guides.
-4. **Archive an approved version when requested.** Local commits and outputs remain traceable. Publishing an agreed tag/result bundle is a separate release step.
+1. **Review the full set.** Compare each new result against its source photograph in the generated gallery, including handle coverage, visible opening, silhouette, broad colour and surface texture.
+2. **Keep the accepted shared styling.** Do not retune density, stroke width, alpha or lighting separately for each image during the transfer check. SAM boxes and manual rim placements correct image-specific region control.
+3. **Record transfer limitations.** Mug7 has no visible opening; mug10 has a notched/asymmetric rim. The algorithm still uses approximate depth and image-specific guidance.
+4. **Publish only after the relevant release instruction.** User satisfaction with an effect and this local collection test do not assign a release name or trigger publication.
 
 Do not claim an achieved reference-similarity percentage without supporting review.
