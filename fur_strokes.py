@@ -37,6 +37,17 @@ def _srgb(rgb: np.ndarray) -> np.ndarray:
     return np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1.0 / 2.4) - 0.055)
 
 
+def depth_ordered_strands(strands):
+    """Approximate far-to-near painter order using this pipeline's relative depth.
+
+    Each record keeps (geometry, shaded colours, original index) together so
+    changing draw order cannot reassign colours or deterministic width variation.
+    Larger root-depth values are treated as nearer. This is a root-based ordering,
+    not per-fragment depth testing of intersecting curved fibres.
+    """
+    return sorted(strands, key=lambda record: (float(record[0][0, 2]), record[2]))
+
+
 class FineFurCanvas:
     """Draw subpixel ribbons with source-over alpha and optional background tint.
 

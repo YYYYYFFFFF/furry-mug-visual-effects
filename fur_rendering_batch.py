@@ -23,7 +23,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 from segment_anything import SamPredictor, sam_model_registry
 from transformers import pipeline
 
-from fur_strokes import FineFurCanvas, repair_aa_color
+from fur_strokes import FineFurCanvas, depth_ordered_strands, repair_aa_color
 from matte_refinement import close_matte_gaps
 
 REQUIRED_PACKAGES = {
@@ -140,6 +140,7 @@ class FurRenderingBatchRunner:
         matte_close_radius: int,
         fill_fur_gaps: bool,
         fur_alpha_cap: float,
+        fur_order: str,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -160,6 +161,7 @@ class FurRenderingBatchRunner:
         self.matte_close_radius = matte_close_radius
         self.fill_fur_gaps = fill_fur_gaps
         self.fur_alpha_cap = fur_alpha_cap
+        self.fur_order = fur_order
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -465,6 +467,7 @@ class FurRenderingBatchRunner:
             if self.fur_finish == "fine":
                 fine_canvas = FineFurCanvas(image_float, mask, self.stroke_width_scale,
                                             self.supersample, self.tip_environment_blend)
+            shaded_strands = [] if self.fur_order == "depth" else None
             render_progress_step = max(len(hairs) // 4, 1)
             for hair_index, hair in enumerate(hairs, start=1):
                 root_pos = hair[0]
@@ -507,9 +510,20 @@ class FurRenderingBatchRunner:
                     cv2.line(fur_layer, (x0, y0), (x1, y1), draw_color, thickness=width_px, lineType=cv2.LINE_AA)
                     cv2.line(fur_alpha, (x0, y0), (x1, y1), draw_alpha, thickness=width_px, lineType=cv2.LINE_AA)
                 if fine_canvas is not None:
-                    fine_canvas.draw_strand(hair, segment_colors, hair_index)
+                    if shaded_strands is None:
+                        fine_canvas.draw_strand(hair, segment_colors, hair_index)
+                    else:
+                        # Shade in generation order to preserve per-strand RNG colours.
+                        shaded_strands.append((hair, segment_colors, hair_index))
                 if hair_index % render_progress_step == 0 or hair_index == len(hairs):
-                    log(f"[{index}/{total}] Stage 5/7 progress: rendered {hair_index}/{len(hairs)} strands")
+                    action = "shaded" if shaded_strands is not None else "rendered"
+                    log(f"[{index}/{total}] Stage 5/7 progress: {action} {hair_index}/{len(hairs)} strands")
+            if shaded_strands is not None:
+                for rendered, (hair, colors, original_index) in enumerate(depth_ordered_strands(shaded_strands), start=1):
+                    fine_canvas.draw_strand(hair, colors, original_index)
+                    if rendered % render_progress_step == 0 or rendered == len(hairs):
+                        log(f"[{index}/{total}] Stage 5/7 depth order: rendered {rendered}/{len(hairs)} strands")
+                del shaded_strands
             if self.stroke_rasterizer == "aa8":
                 fur_layer = fur_layer.astype(np.float32) / 255.0
                 fur_alpha = fur_alpha.astype(np.float32) / 255.0
@@ -752,6 +766,10 @@ def parse_args() -> argparse.Namespace:
         help="Mix 0 to 0.3 of nearby background colour into exterior tips; fine finish only.",
     )
     parser.add_argument(
+        "--fur-order", choices=("generation", "depth"), default="generation",
+        help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
+    )
+    parser.add_argument(
         "--fur-alpha-cap", type=float, default=0.92,
         help="Maximum fur opacity in (0, 1]; 1 lets dense fibres fully cover the backing.",
     )
@@ -792,6 +810,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--inner-wall-mask and --exclude-mask cannot be combined.")
     if not np.isfinite(args.fur_alpha_cap) or not 0 < args.fur_alpha_cap <= 1:
         parser.error("--fur-alpha-cap must be finite and in (0, 1].")
+    if args.fur_order != "generation" and args.fur_finish != "fine":
+        parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
         parser.error("--fill-fur-gaps requires --fur-finish fine.")
     if args.fur_finish != "original" and args.stroke_rasterizer != "aa8":
@@ -853,6 +873,8 @@ def main() -> int:
         run_suffix += "-fillgaps"
     if args.fur_alpha_cap != 0.92:
         run_suffix += f"-cap{args.fur_alpha_cap:g}"
+    if args.fur_order != "generation":
+        run_suffix += f"-order{args.fur_order}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -904,6 +926,7 @@ def main() -> int:
                 "matte_close_radius": args.matte_close_radius,
                 "fill_fur_gaps": args.fill_fur_gaps,
                 "fur_alpha_cap": args.fur_alpha_cap,
+                "fur_order": args.fur_order,
                 "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
                 "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "fur_strokes_sha256": hashlib.sha256((project_root / "fur_strokes.py").read_bytes()).hexdigest(),
@@ -938,6 +961,7 @@ def main() -> int:
         matte_close_radius=args.matte_close_radius,
         fill_fur_gaps=args.fill_fur_gaps,
         fur_alpha_cap=args.fur_alpha_cap,
+        fur_order=args.fur_order,
     )
     runner.load_models()
 

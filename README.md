@@ -94,6 +94,16 @@ Yifan's review of the mug3 `200110` result found a missing patch at the lower ha
 
 See [the gap investigation and controlled comparisons](docs/coverage-repair-2026-10-24.md). The previous `200110` output remains reproducible with the old parameters. All new results are local experiments awaiting review.
 
+## Fine-fur overlap order
+
+The repaired mug3 still showed a smooth, apparently bald strip at the right edge. A controlled test reused the same strand geometry, shaded colours and original strand IDs, changing only their draw order. Optional `--fur-order depth` paints approximate farther roots before nearer roots; this makes individual fibres more visible through the affected edge. The full-run matte and alpha PNGs remain byte-identical to the previous candidate.
+
+```bash
+.venv/bin/python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --fur-finish fine --underlayer-mode fur --tip-environment-blend 0.12 --matte-close-radius 5 --fill-fur-gaps --fur-alpha-cap 1 --fur-order depth
+```
+
+This option requires the fine finish. `generation` remains the default and reproduces the previous image. Depth order uses each root's estimated relative depth, not full per-pixel 3D visibility, and changes overlap across the whole object. See [the ordering investigation](docs/depth-order-2026-10-24.md) for edge, rim, joint and body comparisons. The new mode has been visually evaluated on mug3 only and is awaiting user review.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.

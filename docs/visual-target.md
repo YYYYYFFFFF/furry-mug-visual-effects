@@ -54,3 +54,5 @@ Yifan has not yet reviewed this candidate. The surface is still dense in places,
 ## Follow-up: user review of mug3 coverage
 
 Yifan found visible gaps in `200110`, particularly where the lower handle meets the body, and pointed to the underlayer and matte. A layer-by-layer investigation confirmed that the matte omitted cup pixels there. Sparse fine-fur coverage is a separate issue. See [the corrective experiment](coverage-repair-2026-10-24.md) for repaired masks, local backing fibres, opacity-cap comparisons and the remaining directional band on the right side. The earlier whole-image assessment did not validate these details.
+
+The later [depth-order candidate](depth-order-2026-10-24.md) addresses the right-edge smooth strip through strand overlap order. A full mug3 rerender retains identical matte and alpha while exposing more fine-fibre detail. This is still pending Yifan's review, and mug1's selected appearance baseline remains `120024`.

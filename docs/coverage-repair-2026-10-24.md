@@ -49,3 +49,7 @@ Reproduction command:
 ```
 
 These repairs were inspected on mug3 only. Matte-closing radius should be reviewed for other inputs, especially narrow genuine openings. The dense interior and directional/shading bands remain limitations of the inherited image-space geometry and lighting. No paper-similarity percentage or final visual approval is claimed.
+
+## Subsequent review of the remaining right-edge strip
+
+Yifan again identified a bald-looking right edge in the cap-1 result. The subsequent [ordering investigation](depth-order-2026-10-24.md) isolates overlap order with fixed geometry, colours and strand IDs. Optional depth ordering exposes individual fibres while keeping the matte and saved alpha identical. This is additional evidence beyond the earlier direction/shading hypotheses; opacity and small-gap repairs alone did not solve that strip.
