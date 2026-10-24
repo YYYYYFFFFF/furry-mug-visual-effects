@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -21,6 +22,8 @@ import torch
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 from segment_anything import SamPredictor, sam_model_registry
 from transformers import pipeline
+
+from fur_strokes import FineFurCanvas, repair_aa_color
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -130,6 +133,9 @@ class FurRenderingBatchRunner:
         inner_wall_mask_path: Path | None,
         inner_wall_length_scale: float,
         inner_wall_opacity: float,
+        fur_finish: str,
+        supersample: int,
+        tip_environment_blend: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -144,6 +150,9 @@ class FurRenderingBatchRunner:
         self.inner_wall_mask_path = inner_wall_mask_path
         self.inner_wall_length_scale = inner_wall_length_scale
         self.inner_wall_opacity = inner_wall_opacity
+        self.fur_finish = fur_finish
+        self.supersample = supersample
+        self.tip_environment_blend = tip_environment_blend
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -435,6 +444,10 @@ class FurRenderingBatchRunner:
             canvas_dtype = np.uint8 if self.stroke_rasterizer == "aa8" else np.float32
             fur_layer = np.zeros((height, width, 3), dtype=canvas_dtype)
             fur_alpha = np.zeros((height, width), dtype=canvas_dtype)
+            fine_canvas = None
+            if self.fur_finish == "fine":
+                fine_canvas = FineFurCanvas(image_float, mask, self.stroke_width_scale,
+                                            self.supersample, self.tip_environment_blend)
             render_progress_step = max(len(hairs) // 4, 1)
             for hair_index, hair in enumerate(hairs, start=1):
                 root_pos = hair[0]
@@ -449,6 +462,7 @@ class FurRenderingBatchRunner:
                     hair_tip_color = tip_color
                 color_offset = rng.uniform(-0.04, 0.04, 3).astype(np.float32)
                 n_points = len(hair)
+                segment_colors = np.zeros((n_points - 1, 3), dtype=np.float32) if fine_canvas else None
                 for point_index in range(n_points - 1):
                     p0, p1 = hair[point_index], hair[point_index + 1]
                     tangent = p1 - p0
@@ -461,6 +475,9 @@ class FurRenderingBatchRunner:
                     t = point_index / max(n_points - 1, 1)
                     strand_color = np.clip((1.0 - t) * hair_base_color + t * hair_tip_color + color_offset, 0.0, 1.0)
                     shaded_color = np.clip(strand_color * light_color * (0.5 + 0.5 * diffuse), 0.0, 1.0)
+                    if fine_canvas is not None:
+                        segment_colors[point_index] = shaded_color
+                        continue
                     x0, y0 = int(round(p0[0])), int(round(p0[1]))
                     x1, y1 = int(round(p1[0])), int(round(p1[1]))
                     width_px = max(1, int(4.8 * (1.0 - 0.35 * t) * self.stroke_width_scale))
@@ -472,20 +489,36 @@ class FurRenderingBatchRunner:
                         draw_alpha = 1.0
                     cv2.line(fur_layer, (x0, y0), (x1, y1), draw_color, thickness=width_px, lineType=cv2.LINE_AA)
                     cv2.line(fur_alpha, (x0, y0), (x1, y1), draw_alpha, thickness=width_px, lineType=cv2.LINE_AA)
+                if fine_canvas is not None:
+                    fine_canvas.draw_strand(hair, segment_colors, hair_index)
                 if hair_index % render_progress_step == 0 or hair_index == len(hairs):
                     log(f"[{index}/{total}] Stage 5/7 progress: rendered {hair_index}/{len(hairs)} strands")
             if self.stroke_rasterizer == "aa8":
                 fur_layer = fur_layer.astype(np.float32) / 255.0
                 fur_alpha = fur_alpha.astype(np.float32) / 255.0
-            fur_layer_blurred = cv2.GaussianBlur(fur_layer, (0, 0), sigmaX=1.2, sigmaY=1.2)
-            fur_layer = np.clip(0.85 * fur_layer + 0.15 * fur_layer_blurred, 0.0, 1.0)
-            fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
-            fur_alpha = fur_alpha_blurred * mask + fur_alpha * (1 - mask)
+            if fine_canvas is not None:
+                fur_layer, fur_alpha = fine_canvas.finish()
+                log(f"[{index}/{total}] Fine fur: {self.supersample}x canvas; "
+                    f"{fine_canvas.tinted_segments} segments received exterior tip tint")
+            else:
+                if self.fur_finish == "alpha":
+                    fur_layer = repair_aa_color(fur_layer, fur_alpha)
+                else:
+                    fur_layer_blurred = cv2.GaussianBlur(fur_layer, (0, 0), sigmaX=1.2, sigmaY=1.2)
+                    fur_layer = np.clip(0.85 * fur_layer + 0.15 * fur_layer_blurred, 0.0, 1.0)
+                fur_alpha_blurred = cv2.GaussianBlur(fur_alpha, (0, 0), sigmaX=1.5, sigmaY=1.5)
+                fur_alpha = fur_alpha_blurred * mask + fur_alpha * (1 - mask)
             fur_alpha = np.clip(fur_alpha * 1.05, 0.0, 0.92)
             if self.inner_wall_mask_path is not None:
                 fur_alpha *= 1.0 - (1.0 - self.inner_wall_opacity) * inner_wall_weight
             if self.exclude_mask_path is not None:
                 fur_alpha[excluded_region] = 0.0
+            if self.fur_finish != "original":
+                Image.fromarray((fur_alpha * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_fur_alpha.png")
+                Image.fromarray((fur_layer * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_fur_color.png")
+                Image.fromarray(mask * 255).save(self.output_root / f"{output_prefix}_matte.png")
             log(
                 f"[{index}/{total}] Stage 5/7 complete: {stage_elapsed_message(stage_started)}; "
                 f"sampled base color {np.round(base_color, 3).tolist()}"
@@ -509,6 +542,16 @@ class FurRenderingBatchRunner:
                 Image.fromarray((underlayer_preview * 255).astype(np.uint8)).save(
                     self.output_root / f"{output_prefix}_underlayer.png"
                 )
+            elif self.underlayer_mode == "fur":
+                # A local undercoat avoids exposing flat backing between fine fibres.
+                # Exclude exterior pixels so tip tint never leaks back into the body.
+                coat_weight = fur_alpha * mask
+                coat_sum = cv2.GaussianBlur(fur_layer * coat_weight[:, :, np.newaxis], (0, 0), 3.0)
+                coat_coverage = cv2.GaussianBlur(coat_weight, (0, 0), 3.0)
+                diffuse_underlayer = np.clip(coat_sum / np.maximum(coat_coverage[:, :, np.newaxis], 1e-6), 0.0, 1.0)
+                preview = (1.0 - mask_3d) * image_float + mask_3d * diffuse_underlayer
+                Image.fromarray((preview * 255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_underlayer.png")
             else:
                 diffuse_underlayer = np.zeros_like(result_float)
                 for channel in range(3):
@@ -677,6 +720,18 @@ def parse_args() -> argparse.Namespace:
         help="Scale strand thickness; 1.0 preserves the original widths.",
     )
     parser.add_argument(
+        "--fur-finish", choices=("original", "alpha", "fine"), default="original",
+        help="Preserve the baseline, repair AA alpha, or draw fine tapered fibres; new modes require aa8.",
+    )
+    parser.add_argument(
+        "--supersample", type=int, choices=(2, 4), default=4,
+        help="Internal canvas scale for the fine finish; final image size is unchanged.",
+    )
+    parser.add_argument(
+        "--tip-environment-blend", type=float, default=0.0,
+        help="Mix 0 to 0.3 of nearby background colour into exterior tips; fine finish only.",
+    )
+    parser.add_argument(
         "--fur-density",
         type=float,
         default=0.35,
@@ -684,9 +739,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--underlayer-mode",
-        choices=("flat", "local"),
+        choices=("flat", "local", "fur"),
         default="flat",
-        help="Use the original single-colour underlayer or a masked, blurred local-colour underlayer.",
+        help="Use the original flat base, blurred source colour, or a local fur-colour undercoat.",
     )
     parser.add_argument(
         "--depth-source",
@@ -703,6 +758,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--inner-wall-mask requires --image so the mask applies to one input.")
     if args.inner_wall_mask is not None and args.exclude_mask is not None:
         parser.error("--inner-wall-mask and --exclude-mask cannot be combined.")
+    if args.fur_finish != "original" and args.stroke_rasterizer != "aa8":
+        parser.error("--fur-finish alpha/fine requires --stroke-rasterizer aa8.")
+    if args.tip_environment_blend != 0 and args.fur_finish != "fine":
+        parser.error("--tip-environment-blend requires --fur-finish fine.")
+    if not np.isfinite(args.tip_environment_blend) or not 0 <= args.tip_environment_blend <= 0.3:
+        parser.error("--tip-environment-blend must be finite and between 0 and 0.3.")
     return args
 
 
@@ -746,6 +807,10 @@ def main() -> int:
         run_suffix += "-exclude"
     if inner_wall_mask_path is not None:
         run_suffix += f"-innerwall{args.inner_wall_length_scale:g}-opacity{args.inner_wall_opacity:g}"
+    if args.fur_finish == "alpha":
+        run_suffix += "-alpha"
+    elif args.fur_finish == "fine":
+        run_suffix += f"-fine{args.supersample}-env{args.tip_environment_blend:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -771,6 +836,7 @@ def main() -> int:
     log(f"Stroke rasterizer: {args.stroke_rasterizer}")
     log(f"Stroke width scale: {args.stroke_width_scale:g}")
     log(f"Fur density: {args.fur_density:g}")
+    log(f"Fur finish: {args.fur_finish}; supersample {args.supersample}; tip tint {args.tip_environment_blend:g}")
     log(f"Underlayer mode: {args.underlayer_mode}")
     log(f"Exclude mask: {exclude_mask_path if exclude_mask_path is not None else 'none'}")
     log(f"Inner-wall mask: {inner_wall_mask_path if inner_wall_mask_path is not None else 'none'}")
@@ -790,6 +856,11 @@ def main() -> int:
                 "stroke_rasterizer": args.stroke_rasterizer,
                 "stroke_width_scale": args.stroke_width_scale,
                 "fur_density": args.fur_density,
+                "fur_finish": args.fur_finish,
+                "supersample": args.supersample,
+                "tip_environment_blend": args.tip_environment_blend,
+                "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "fur_strokes_sha256": hashlib.sha256((project_root / "fur_strokes.py").read_bytes()).hexdigest(),
                 "underlayer_mode": args.underlayer_mode,
                 "exclude_mask": str(args.exclude_mask) if args.exclude_mask is not None else None,
                 "inner_wall_mask": str(args.inner_wall_mask) if args.inner_wall_mask is not None else None,
@@ -815,6 +886,9 @@ def main() -> int:
         inner_wall_mask_path=inner_wall_mask_path,
         inner_wall_length_scale=args.inner_wall_length_scale,
         inner_wall_opacity=args.inner_wall_opacity,
+        fur_finish=args.fur_finish,
+        supersample=args.supersample,
+        tip_environment_blend=args.tip_environment_blend,
     )
     runner.load_models()
 

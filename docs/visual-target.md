@@ -1,6 +1,6 @@
 # Visual target for the next Furry Mug iteration
 
-Status: provisional local development target, chosen on 20 October 2026. This is a visual evaluation plan, not a released version or a claim of 80% similarity.
+Status: updated on 24 October 2026 to use Yifan's selected `mug1.jpg` result `120024`. The original 20 October input choice was provisional. This is a visual evaluation plan, not a released version or a claim of 80% similarity.
 
 ## Reference appearance
 
@@ -17,17 +17,19 @@ All ten archived inputs are 602 × 602 pixels; a local contact sheet is at `outp
 
 | Role | Input | Reason |
 | --- | --- | --- |
-| Development hero | `mug3.jpg` | Mostly matte beige surface, simple background, clear body, open rim and handle. These make the fur material and preservation of shape easier to judge. This is a provisional test input, not yet the final portfolio hero image. |
-| Secondary check | `mug1.jpg` | Its softer pink colour and different cup shape reveal whether improvements carry over to another input. An earlier render under the same stroke settings already exists. |
-| Challenge case | `mug9.jpg` | High-contrast pattern exposes masking and colour-transfer failures. A manual SAM box previously selected the full mug after the centre prompt selected only part of it. |
+| Development hero | `mug1.jpg` | Yifan judged the `20261021-120024-float-aa8-width0.5` result good enough to refine, and specifically requested finer fur, removal of the faint dark outline, and soft tips with a little nearby environment colour. |
+| Secondary check | `mug3.jpg` | The earlier provisional hero provides a different shape, lighting and background for checking whether the new finish transfers. |
+| Challenge case | `mug9.jpg` | High-contrast pattern exposes masking and colour-transfer failures. A manual SAM box previously selected the full mug after the centre prompt selected only part of it. Not rerun in the 24 October finish experiment. |
 
-The baseline for `mug3.jpg` used float depth, the centre-point SAM prompt, `aa8` stroke rasterization, width scale `0.5`, density `0.35` and fixed seed `42`. The mask covered 53.1% of the frame and the renderer generated 196,968 strands. It includes the cup interior as part of the mug region, and the final cup appears much darker and more uniform than the original. A controlled test later found that the single-colour underlayer was not the main visible cause; see the region and underlayer experiment. Inspect the saved pipeline rather than treating the mask as a perfect material-region label.
+The accepted appearance baseline uses float depth, the centre-point SAM prompt, `aa8` stroke rasterization, width scale `0.5`, density `0.35`, flat underlayer and fixed seed `42`. It uses neither the exclusion mask nor the later inner-wall styling guide. Keep those settings for the baseline comparison:
 
 ```bash
-python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5
+python fur_rendering_batch.py --image mug1.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5
 ```
 
-The baseline is under `outputs/20261020-225129-float-aa8-width0.5/`. Local boards at `outputs/comparisons/20261020-visual-target/mug1-mug3-baseline.png` and `private-reference-board.png` show the selected inputs, current renders and private paper reference crops. `run-record.json` records checksums. All generated boards are Git-ignored.
+The baseline is under `outputs/20261021-120024-float-aa8-width0.5/`. After the 24 October renderer changes, the same parameters still produce a byte-identical final PNG. The current candidate and comparisons are documented in [the fine-fur experiment](fine-fur-experiment-2026-10-24.md), with boards and checksums under `outputs/comparisons/20261024-fine-fur/`. Generated boards remain Git-ignored.
+
+The earlier `mug3.jpg` baseline (`outputs/20261020-225129-float-aa8-width0.5/`) and private reference board (`outputs/comparisons/20261020-visual-target/private-reference-board.png`) remain available as historical comparisons. The original selection of `mug3.jpg` was not a final portfolio-image decision.
 
 ## Proposed visual review gate
 
@@ -41,6 +43,10 @@ To make the requested “80% close” goal reviewable, score each item from 0 (p
 
 Yifan's own visual judgment should decide whether a result is close enough; the numeric gate is only a way to compare local iterations consistently.
 
-## Controlled region test and next target
+## Current result and remaining target
 
-The planned [2 × 2 region and underlayer test](region-underlayer-experiment-2026-10-20.md) exposed an evaluation mistake: full-interior exclusion made the opening legible but left a ceramic inner wall and a broken fur rim. Yifan rejected that result. The later [inner-wall correction](inner-wall-correction-2026-10-21.md) keeps the inner wall furry while preserving more recess shading; its quality is still provisional. A local-colour underlayer had little visible effect, so flat remains the default. The masks are per-image manual inputs, and no result has passed the subjective review gate above. Next, refine the dark/dense inner-wall material and irregular rim tufts. `mug9.jpg` remains a later challenge case.
+The [region experiment](region-underlayer-experiment-2026-10-20.md) and [inner-wall correction](inner-wall-correction-2026-10-21.md) remain useful history. Full-interior exclusion was rejected by Yifan because it left ceramic visible and broke the furry rim. The later inner-wall styling is optional; it is not part of the user-selected `120024` baseline or the current fine-fur candidate.
+
+The 24 October candidate makes the silhouette finer and substantially reduces the gray fringe on the two rendered mugs. Transparent tapered tips provide most of the softness; nearby environment tint is a restrained finishing adjustment. Fine rendering initially exposed pale gaps over the flat backing, so the candidate uses a locally averaged fur-colour undercoat. This differs from the earlier source-colour underlayer test, which had little visible effect.
+
+Yifan has not yet reviewed this candidate. The surface is still dense in places, the inner wall remains coarse/dark, and some rim strands look long or brush-like. Assess those limits against the accepted baseline before further changes. No result has passed the subjective gate above, and no similarity percentage has been established.

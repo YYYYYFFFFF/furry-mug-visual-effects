@@ -1,10 +1,20 @@
 # Next iteration
 
-This is the remaining plan for a portfolio-oriented refinement. Depth precision, a manual SAM box prompt, antialiased stroke drawing, line width, density, cup-interior exclusion and a local-colour underlayer were tested on 20 October 2026; the furry inner-wall correction was tested on 21 October. See [the depth and mask record](experiment-2026-10-20.md), [the stroke record](stroke-experiment-2026-10-20.md), [the region and underlayer record](region-underlayer-experiment-2026-10-20.md), and [the inner-wall correction](inner-wall-correction-2026-10-21.md). Keep the original course submission preserved and compare each iteration with the same input images.
+The current appearance baseline is Yifan's selected `mug1.jpg` result `20261021-120024-float-aa8-width0.5`. Preserve its depth, segmentation and overall appearance while reviewing refinements. The course submission remains preserved by `original-program`.
 
-1. **Establish a trustworthy baseline.** Run the current script on a small set of simple and patterned mugs; retain the input, mask, depth, fur layer, final composite, elapsed time, and failure reason locally. Resolve report/code differences before making implementation claims.
-2. **Improve segmentation control.** A manual box corrected the tested patterned mug, and image-specific binary masks were first used to exclude the interiors of two mugs. Yifan rejected that output because it exposed ceramic inner walls and broke the fur rim. A later treatment uses the same masks as manual styling guides for shorter inner-wall fur. Both uses require user placement. Further foreground/background controls or automatic region detection remain untested. Show the trade-off between automation and control.
-3. **Improve the visual result.** The first stroke comparison favours 8-bit antialiasing with half-width lines at the original 0.35 density on two tested mugs; reducing density to 0.15 made one patterned mug worse. The local-colour underlayer made little visible difference. Full interior exclusion is visually wrong for a furry mug; the later inner-wall styling experiment restores fur and recess shading but still looks dense or dark. Next, hold the corrected region treatment fixed and test strand colour and shading, then direction and length around the rim. Inspect full frames and 100% crops, changing one factor at a time.
-4. **Build a concise case study.** Show one strong example, one failure and the iteration that addresses it. State clearly what remains imperfect and credit the reference paper and pretrained models.
+## Implemented and checked
 
-Do not describe any proposed technique as implemented until it is in code and a new output has been checked.
+- [Depth and mask controls](experiment-2026-10-20.md): float depth reduces normal-map banding; a manual box fixes the tested patterned-mug segmentation failure.
+- [Stroke experiment](stroke-experiment-2026-10-20.md): `aa8`, half-width lines and density `0.35` are the accepted comparison settings. Reducing density exposed speckling.
+- [Region and underlayer experiment](region-underlayer-experiment-2026-10-20.md): full-interior exclusion was rejected because it left visible ceramic and a broken rim. The source-colour underlayer had little visible benefit in that test.
+- [Inner-wall correction](inner-wall-correction-2026-10-21.md): optional manual guides restore short inner-wall fur. These guides are not part of `120024` or the current candidate.
+- [Fine-fur experiment](fine-fur-experiment-2026-10-24.md): optional corrected alpha, supersampled tapered strands, a fur-colour undercoat and restrained exterior-tip environment tint were rendered on `mug1.jpg` and `mug3.jpg`. The gray outline is substantially reduced. The new undercoat addresses gaps exposed specifically by finer rendering. Four focused tests pass, and the previous baseline output remains byte-identical.
+
+## Next decisions
+
+1. **Review the new candidate beside `120024`.** Inspect the full image and enlarged left edge, handle and body. The main gain is finer strand rendering and correct edge compositing; tint alone is a small change. Results and exact source hashes are saved locally, with no release yet.
+2. **Refine remaining dense material and rim direction if needed.** The central surface and inner wall can still read as dense fibres; some rim strands are brush-like. Local direction/length and shading need separate controlled comparisons. Keep density fixed initially, given the earlier low-density failure.
+3. **Check harder inputs after selecting a finish.** The fine finish has only been checked on two simple-background mugs. Patterned `mug9.jpg`, imperfect mattes and detailed backgrounds need their own evaluation. Optional combinations with inner-wall guides have not been evaluated with the new finish.
+4. **Prepare an approved result archive and concise case study.** Once Yifan approves a version, bundle its code tag, settings, inputs/model identifiers and generated results under the agreed release name. Show a failure and the actual corrective iteration; credit the paper and pretrained models. Local commits are not releases.
+
+Do not describe proposed techniques as implemented or claim an achieved similarity percentage without supporting review.

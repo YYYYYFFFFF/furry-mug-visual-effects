@@ -62,7 +62,25 @@ python fur_rendering_batch.py --image mug1.jpg --depth-source float --stroke-ras
 
 See [the inner-wall correction record](docs/inner-wall-correction-2026-10-21.md) for full-size and rim-crop comparisons, exact settings and remaining visual problems. The optional `--underlayer-mode local` was also tested and had little visible effect, so `flat` remains the default. All of these results are unpublished local experiments.
 
-The [visual target](docs/visual-target.md) provisionally uses `mug3.jpg` as the development hero, with `mug1.jpg` as a second check and `mug9.jpg` as a challenge case. It records the reference figures, current baseline and a subjective review rubric.
+## Fine fur and soft tips
+
+Yifan selected the `mug1.jpg` result `20261021-120024-float-aa8-width0.5` as the appearance baseline. The optional fine finish corrects dark antialiasing fringes, draws narrower tapered strands at 4x resolution, and fades their tips. A fur-coloured undercoat fills gaps exposed by the finer strands. Nearby background colour can lightly tint only the exterior part of a strand's tip:
+
+```bash
+.venv/bin/python fur_rendering_batch.py --image mug1.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --fur-finish fine --underlayer-mode fur --tip-environment-blend 0.12
+```
+
+The tint value is a maximum blending weight, not a uniform 12% recolouring of every tip. The tested difference is subtle; the main visual changes come from alpha correction and finer rendering. `--tip-environment-blend 0` turns the tint off. `--fur-finish alpha` isolates the alpha correction on the older strokes; `--fur-finish original` is the default and keeps the previous renderer. Both new finishes require `aa8`. Keep the same depth, width and density when comparing finishes.
+
+`fur_strokes.py` implements the optional renderer. `tests/test_fur_strokes.py` checks colour/alpha compositing and tint scope without loading models:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s tests -v
+```
+
+See [the fine-fur experiment](docs/fine-fur-experiment-2026-10-24.md) for exact runs, comparison images, runtime versions and limitations. The local `.venv` was recovered with access to existing system/user packages and cached models; a clean isolated installation has not been validated. New runs record source-file hashes in `run_config.json`. Results remain local pending visual review.
+
+The [visual target](docs/visual-target.md) now uses `mug1.jpg` and the user-selected `120024` result, with `mug3.jpg` as a second check and `mug9.jpg` as a later challenge case. The current candidate uses neither exclusion nor inner-wall guide masks.
 
 ## Current constraints
 
