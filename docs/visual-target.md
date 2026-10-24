@@ -60,3 +60,5 @@ The later [depth-order candidate](depth-order-2026-10-24.md) addresses the right
 ## Current scope after the latest review
 
 Yifan explicitly identified the outer lip as the only remaining requested issue in the mug3 depth-order result and said the other parts were well optimized. Use that exact `204114-...-orderdepth` result as the base for this local refinement. The [rim-detail candidate](rim-detail-2026-10-24.md) changes only a narrow guided rim band, with pixel-exact preservation outside it. Further changes to body, handle, right edge or deeper interior are outside the present request. The new lip texture still needs visual review; this does not set a release name or authorize publication.
+
+Yifan's next crop specifically identifies the rear/top silhouette as still bald-looking. The current [rear-rim candidate](rear-rim-2026-10-24.md) therefore allows new fine coverage beyond the old upper contour while preserving the front lip and body exactly. This is a separate silhouette pass; the earlier narrow surface pass remains in place. Inspect the saved final combined alpha, since the primary alpha does not include finishing layers.

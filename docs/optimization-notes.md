@@ -18,7 +18,7 @@ The [depth-order comparison](depth-order-2026-10-24.md) then isolated a major ca
 
 Yifan has now reviewed the mug3 depth-order result and identified only the outer lip as still sparse, judging the other areas good. The [local rim-finishing experiment](rim-detail-2026-10-24.md) therefore preserves that result outside a narrow guided band. Earlier notes about dense bodies or dark interiors are historical observations, not instructions to change those accepted areas.
 
-1. **Review the outer rim against the accepted depth-order base.** Use the saved front-lip and opening comparisons. All final pixels outside the rim support are identical; review whether the new short-fibre texture is dense enough without losing the lip's shape.
+1. **Review the rear/top silhouette against the previous rim-surface result.** Yifan identified sparse protruding fibres there after the surface finish. The [rear-rim pass](rear-rim-2026-10-24.md) creates new outward coverage while preserving the front lip, body and handle. Compare the actual final image and final combined alpha; the primary fur-alpha file excludes these finishing layers.
 2. **Preserve the accepted remainder.** Do not change the body, handle, right edge or deeper interior during this refinement. Broader direction, lighting and density changes need a new user request.
 3. **Generalize only when requested.** The newest depth-order and rim-detail modes have been visually evaluated on mug3. Other inputs need separate checks and an appropriately aligned rim guide.
 4. **Archive an approved version when requested.** Keep local commits and results traceable. Publish the agreed tag/result bundle only after the relevant release approval; development commits are not releases.

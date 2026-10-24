@@ -25,7 +25,7 @@ from transformers import pipeline
 
 from fur_strokes import FineFurCanvas, depth_ordered_strands, repair_aa_color
 from matte_refinement import close_matte_gaps
-from fur_rim import apply_rim_detail
+from fur_rim import apply_rear_rim_fringe, apply_rim_detail
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -144,6 +144,7 @@ class FurRenderingBatchRunner:
         fur_order: str,
         rim_guide_mask_path: Path | None,
         rim_detail_strength: float,
+        rear_rim_strength: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -167,6 +168,7 @@ class FurRenderingBatchRunner:
         self.fur_order = fur_order
         self.rim_guide_mask_path = rim_guide_mask_path
         self.rim_detail_strength = rim_detail_strength
+        self.rear_rim_strength = rear_rim_strength
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -660,6 +662,22 @@ class FurRenderingBatchRunner:
                     self.output_root / f"{output_prefix}_rim_support.png")
                 log(f"[{index}/{total}] Rim finish: {count} short fibres; "
                     f"strength {self.rim_detail_strength:g}")
+                if self.rear_rim_strength > 0:
+                    Image.fromarray(final_image_uint8).save(
+                        self.output_root / f"{output_prefix}_before_rear_rim.png")
+                    final_image_uint8, rear_alpha, rear_support, rear_count = apply_rear_rim_fringe(
+                        final_image_uint8, image_float, mask, rim_guide,
+                        self.rear_rim_strength, self.supersample, self.tip_environment_blend)
+                    final_fur_alpha = fur_alpha + (1.0 - fur_alpha) * detail_alpha
+                    final_fur_alpha += (1.0 - final_fur_alpha) * rear_alpha
+                    Image.fromarray((rear_alpha * 255).astype(np.uint8)).save(
+                        self.output_root / f"{output_prefix}_rear_rim_alpha.png")
+                    Image.fromarray((rear_support * 255).astype(np.uint8)).save(
+                        self.output_root / f"{output_prefix}_rear_rim_support.png")
+                    Image.fromarray((np.clip(final_fur_alpha, 0, 1) * 255).astype(np.uint8)).save(
+                        self.output_root / f"{output_prefix}_final_fur_alpha.png")
+                    log(f"[{index}/{total}] Rear rim: {rear_count} outward fibres; "
+                        f"strength {self.rear_rim_strength:g}")
             Image.fromarray(final_image_uint8).save(final_output_path)
             if self.inner_wall_mask_path is not None or rim_guide is not None:
                 result_float = final_image_uint8.astype(np.float32) / 255.0
@@ -801,6 +819,10 @@ def parse_args() -> argparse.Namespace:
         help="Strength of guided local rim finishing in [0, 1]; requires a rim guide to have effect.",
     )
     parser.add_argument(
+        "--rear-rim-strength", type=float, default=0.0,
+        help="Optional outward rear-rim fibres in [0, 1]; requires --rim-guide-mask.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -849,6 +871,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--rim-guide-mask requires --image and --fur-finish fine.")
     if not np.isfinite(args.rim_detail_strength) or not 0 <= args.rim_detail_strength <= 1:
         parser.error("--rim-detail-strength must be finite and between 0 and 1.")
+    if not np.isfinite(args.rear_rim_strength) or not 0 <= args.rear_rim_strength <= 1:
+        parser.error("--rear-rim-strength must be finite and between 0 and 1.")
+    if args.rear_rim_strength > 0 and args.rim_guide_mask is None:
+        parser.error("--rear-rim-strength requires --rim-guide-mask.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -922,6 +948,8 @@ def main() -> int:
         run_suffix += f"-order{args.fur_order}"
     if rim_guide_mask_path is not None:
         run_suffix += f"-rim{args.rim_detail_strength:g}"
+    if args.rear_rim_strength > 0:
+        run_suffix += f"-rear{args.rear_rim_strength:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -977,6 +1005,7 @@ def main() -> int:
                 "rim_guide_mask": str(args.rim_guide_mask) if args.rim_guide_mask is not None else None,
                 "rim_guide_sha256": hashlib.sha256(rim_guide_mask_path.read_bytes()).hexdigest() if rim_guide_mask_path is not None else None,
                 "rim_detail_strength": args.rim_detail_strength,
+                "rear_rim_strength": args.rear_rim_strength,
                 "fur_rim_sha256": hashlib.sha256((project_root / "fur_rim.py").read_bytes()).hexdigest(),
                 "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
                 "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -1015,6 +1044,7 @@ def main() -> int:
         fur_order=args.fur_order,
         rim_guide_mask_path=rim_guide_mask_path,
         rim_detail_strength=args.rim_detail_strength,
+        rear_rim_strength=args.rear_rim_strength,
     )
     runner.load_models()
 

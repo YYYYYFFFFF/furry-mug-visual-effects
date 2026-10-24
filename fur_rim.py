@@ -78,3 +78,96 @@ def apply_rim_detail(final_rgb: np.ndarray, opening: np.ndarray,
     changed = alpha > 0
     result[changed] = np.rint(mixed[changed] * 255).astype(np.uint8)
     return result, alpha, weight, len(ids)
+
+
+def _smooth(value):
+    value = np.clip(value, 0, 1)
+    return value * value * (3 - 2 * value)
+
+
+def rear_rim_region(object_mask, opening):
+    """Local upper silhouette scope; roots must lie on the actual mug matte."""
+    mask = np.asarray(object_mask, dtype=bool)
+    guide = np.asarray(opening, dtype=bool)
+    if mask.shape != guide.shape or not mask.any() or not guide.any() or guide.all():
+        raise ValueError('Object matte and opening guide must be valid and the same size.')
+    scale = min(mask.shape) / 602.0
+    gy, gx = np.where(guide)
+    cy = (gy.min() + gy.max()) * 0.5
+    ry = max((gy.max() - gy.min()) * 0.5, 1)
+    y = np.arange(mask.shape[0], dtype=np.float32)[:, None]
+    rear = _smooth((cy - y) / (0.65 * ry))
+    inner = cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 5)
+    outer = cv2.distanceTransform((~mask).astype(np.uint8), cv2.DIST_L2, 5)
+    guide_distance = cv2.distanceTransform((~guide).astype(np.uint8), cv2.DIST_L2, 5)
+    guide_distance -= cv2.distanceTransform(guide.astype(np.uint8), cv2.DIST_L2, 5)
+    near_opening = _smooth((guide_distance + 4 * scale) / (4 * scale))
+    near_opening *= 1 - _smooth((guide_distance - 22 * scale) / (8 * scale))
+    # Allow genuinely new coverage beyond the old fur silhouette. Fade only at
+    # the explicit local scope boundary, not against the old alpha footprint.
+    support = rear * near_opening
+    support *= 1 - _smooth((inner - 3 * scale) / (5 * scale))
+    support *= 1 - _smooth((outer - 12 * scale) / (4 * scale))
+    roots = support * mask * (inner <= 6 * scale)
+    field = cv2.GaussianBlur(outer - inner, (0, 0), 1.25)
+    dx = cv2.Sobel(field, cv2.CV_32F, 1, 0, ksize=3)
+    dy = cv2.Sobel(field, cv2.CV_32F, 0, 1, ksize=3)
+    return support.astype(np.float32), roots.astype(np.float32), np.arctan2(dy, dx)
+
+
+def apply_rear_rim_fringe(final_rgb, source_rgb, object_mask, opening,
+                          strength=0.85, supersample=4, environment_blend=0.12):
+    """Grow fine outward fibres at the guided rear lip, including new coverage.
+
+    Upper-half placement assumes an upright frontal mug photograph. The existing
+    matte determines the roots, while the permitted silhouette band can extend
+    into background. The front lip, body and deep opening remain untouched.
+    """
+    if not np.isfinite(strength) or not 0 <= strength <= 1:
+        raise ValueError('Rear-rim strength must be finite and between 0 and 1.')
+    support, roots, direction = rear_rim_region(object_mask, opening)
+    if final_rgb.shape != (*support.shape, 3) or final_rgb.dtype != np.uint8:
+        raise ValueError('Rear-rim finishing expects a same-size RGB uint8 image.')
+    if source_rgb.shape != final_rgb.shape:
+        raise ValueError('Source RGB must match the final image.')
+    if strength == 0:
+        return final_rgb.copy(), np.zeros_like(support), support, 0
+    ys, xs = np.where(roots > 0.05)
+    if not len(xs):
+        raise ValueError('No rear-rim roots found where the guide meets the object silhouette.')
+    image = final_rgb.astype(np.float32) / 255
+    mask = np.asarray(object_mask, np.float32)
+    colour = cv2.GaussianBlur(image * mask[..., None], (0, 0), 2.0)
+    colour /= np.maximum(cv2.GaussianBlur(mask, (0, 0), 2.0)[..., None], 1e-6)
+    # Sample the original background for tip tint, not existing rendered fur.
+    canvas = FineFurCanvas(source_rgb, object_mask, 0.34, supersample, environment_blend)
+    rng = np.random.default_rng(20261026)
+    t = np.linspace(0, 1, 9, dtype=np.float32)
+    scale = min(mask.shape) / 602.0
+    count = 0
+    for x, y in zip(xs, ys):
+        expected = 2.2 * float(roots[y, x])
+        repeats = int(expected) + int(rng.random() < expected % 1)
+        for _ in range(repeats):
+            angle = direction[y, x] + rng.uniform(-0.55, 0.55)
+            forward = np.array([np.cos(angle), np.sin(angle)], np.float32)
+            tangent = np.array([-forward[1], forward[0]], np.float32)
+            length = rng.uniform(4.5, 8.0) if rng.random() < 0.7 else rng.uniform(8, 12)
+            length *= scale
+            bend = rng.uniform(-0.6, 0.6) * length
+            root = np.array([x, y], np.float32) + rng.uniform(-0.4, 0.4, 2)
+            hair = np.zeros((len(t), 3), np.float32)
+            hair[:, :2] = root + t[:, None] * length * forward
+            hair[:, :2] += (t * (1-t))[:, None] * bend * tangent
+            brightness = rng.uniform(0.9, 1.16)
+            colour_ramp = np.linspace(0.96, 1.12, len(t)-1)[:, None]
+            colors = np.clip(colour[y, x][None, :] * brightness * colour_ramp, 0, 1)
+            canvas.draw_strand(hair, colors.astype(np.float32), count)
+            count += 1
+    rgb, alpha = canvas.finish()
+    alpha *= support * strength
+    mixed = image * (1-alpha[..., None]) + rgb * alpha[..., None]
+    result = final_rgb.copy()
+    active = alpha > 0
+    result[active] = np.rint(np.clip(mixed[active], 0, 1) * 255).astype(np.uint8)
+    return result, alpha, support, count

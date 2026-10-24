@@ -47,3 +47,7 @@ All generated artifacts remain local and Git-ignored. Only mug3 has been visuall
 ```bash
 .venv/bin/python fur_rendering_batch.py --image mug3.jpg --depth-source float --stroke-rasterizer aa8 --stroke-width-scale 0.5 --fur-finish fine --underlayer-mode fur --tip-environment-blend 0.12 --matte-close-radius 5 --fill-fur-gaps --fur-alpha-cap 1 --fur-order depth --rim-guide-mask data/region-masks/mug3-interior.png --rim-detail-strength 0.75
 ```
+
+## Subsequent rear-contour feedback
+
+Yifan's later crop identified the top/back silhouette as still sparse. The coverage-clipped surface finish above could not extend beyond the old silhouette. The separate [rear-rim fringe](rear-rim-2026-10-24.md) adds outward fibres only at that rear arc, retaining the front surface finish and the accepted rest of the image.

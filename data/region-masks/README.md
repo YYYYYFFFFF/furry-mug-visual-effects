@@ -8,3 +8,5 @@ These 602 × 602 binary masks approximate visible cup interiors in their matchin
 ## Opening guide for outer-rim finishing
 
 The mug3 ellipse is also used by `--rim-guide-mask data/region-masks/mug3-interior.png`. In that mode, the white area only locates the opening boundary; a narrow feathered band around it receives local short-fibre detail. This does not activate the older `--inner-wall-mask` treatment. The guide was inspected against mug3, and the resulting edit is constrained to its rim band; see [the rim-detail record](../../docs/rim-detail-2026-10-24.md). Do not apply the same coordinates to other photographs.
+
+With `--rear-rim-strength` enabled, the same guide's upper half selects the rear lip while the actual mug matte supplies roots. The rear support allows tips outside the old silhouette, unlike the coverage-clipped surface finish. This placement assumes an upright frontal mug; review alignment for each input.

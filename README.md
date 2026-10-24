@@ -114,6 +114,10 @@ Yifan accepted the depth-order result outside the outer lip and requested denser
 
 The existing white opening ellipse is reused solely as a placement guide; this does not enable `--inner-wall-mask` styling. `fur_rim.py` performs the local finishing after the accepted primary composite. It saves the pre-finish image, rim support and added alpha so the edit's scope can be checked. This is an image-specific guided effect, not automatic rim detection. See [the rim-detail experiment](docs/rim-detail-2026-10-24.md) for the actual run, narrow-band comparisons and pixel-preservation checks. Without a rim guide, the finishing pass is disabled.
 
+The subsequent rear-rim refinement addresses sparse protruding fibres at the top/back silhouette. Add `--rear-rim-strength 0.85` to the guided rim command to grow short outward fibres from the actual mug matte. This pass can extend into the background within a narrow rear-only support; it preserves the front lip and body. The default is `0` (off). See [the rear-rim record](docs/rear-rim-2026-10-24.md).
+
+When rear-rim finishing is enabled, inspect `image_1_final_fur_alpha.png` for coverage including the primary fur and both finishing passes. `image_1_fur_alpha.png` remains the primary-layer diagnostic, and does not include added finishing fibres. Separate rear alpha/support and the image before this pass are also saved.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.
