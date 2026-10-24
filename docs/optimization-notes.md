@@ -16,11 +16,11 @@ The [depth-order comparison](depth-order-2026-10-24.md) then isolated a major ca
 
 ## Current scope and next decisions
 
-Yifan has now reviewed the mug3 depth-order result and identified only the outer lip as still sparse, judging the other areas good. The [local rim-finishing experiment](rim-detail-2026-10-24.md) therefore preserves that result outside a narrow guided band. Earlier notes about dense bodies or dark interiors are historical observations, not instructions to change those accepted areas.
+Yifan accepted the rear-rim result and then authorized stronger fur texture through coherent strand brightness variation and restrained highlights. The previous restriction to rim-only changes applied to the completed rim refinement; the current request authorizes shading changes across the mug while retaining its geometry and coverage.
 
-1. **Review the rear/top silhouette against the previous rim-surface result.** Yifan identified sparse protruding fibres there after the surface finish. The [rear-rim pass](rear-rim-2026-10-24.md) creates new outward coverage while preserving the front lip, body and handle. Compare the actual final image and final combined alpha; the primary fur-alpha file excludes these finishing layers.
-2. **Preserve the accepted remainder.** Do not change the body, handle, right edge or deeper interior during this refinement. Broader direction, lighting and density changes need a new user request.
-3. **Generalize only when requested.** The newest depth-order and rim-detail modes have been visually evaluated on mug3. Other inputs need separate checks and an appropriately aligned rim guide.
-4. **Archive an approved version when requested.** Keep local commits and results traceable. Publish the agreed tag/result bundle only after the relevant release approval; development commits are not releases.
+1. **Review texture contrast.** The [strand-lighting A/B experiment](strand-lighting-2026-10-24.md) compares the accepted baseline with per-strand contrast and optional soft glints. Inspect both native size and enlarged body detail.
+2. **Keep the accepted fur structure.** Density, thickness, geometry, alpha, soft tips and the rear-rim silhouette remain fixed. No undercoat darkening or global sharpening is part of this comparison.
+3. **Generalize only when requested.** Latest shading and guided-rim modes have been visually evaluated on mug3. Other images need separate checks and aligned guides.
+4. **Archive an approved version when requested.** Local commits and outputs remain traceable. Publishing an agreed tag/result bundle is a separate release step.
 
 Do not claim an achieved reference-similarity percentage without supporting review.

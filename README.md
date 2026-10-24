@@ -118,6 +118,20 @@ The subsequent rear-rim refinement addresses sparse protruding fibres at the top
 
 When rear-rim finishing is enabled, inspect `image_1_final_fur_alpha.png` for coverage including the primary fur and both finishing passes. `image_1_fur_alpha.png` remains the primary-layer diagnostic, and does not include added finishing fibres. Separate rear alpha/support and the image before this pass are also saved.
 
+## Strand contrast and soft highlights
+
+Yifan accepted the rear-rim appearance and requested stronger visible fibre texture. Two optional **colour-only** parameters add coherent brightness variation per primary strand and soft highlights on some lit strands:
+
+```bash
+# Append to the accepted mug3 fine-fur / guided-rim command:
+--strand-contrast 0.12                         # A: natural texture contrast
+--strand-contrast 0.12 --strand-highlight 0.12 # B: A plus soft directional glints
+```
+
+Both default to `0` and require `--fur-finish fine` when positive. Contrast is a maximum plus/minus RGB brightness gain per strand (`0`–`0.4`), not a whole-image contrast slider. Highlight strength (`0`–`0.3`) caps an additional direction- and position-weighted gain on approximately 30% of strands. The actual visible glint is much weaker than its cap. There is no geometry, density, width or alpha change. Rim and backing fibres inherit the revised local colours; they retain their existing shading variation.
+
+`fur_lighting.py` implements this artistic shading approximation. Runs save settings/source hashes and `image_1_strand_lighting.json` with primary strand count and geometry hash. The [controlled experiment](docs/strand-lighting-2026-10-24.md) records the accepted baseline, A/B outputs, unchanged coverage and limitations. Default settings reproduce the accepted mug3 PNG byte for byte. These are local development candidates, not a release.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.

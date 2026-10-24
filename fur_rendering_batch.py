@@ -26,6 +26,7 @@ from transformers import pipeline
 from fur_strokes import FineFurCanvas, depth_ordered_strands, repair_aa_color
 from matte_refinement import close_matte_gaps
 from fur_rim import apply_rear_rim_fringe, apply_rim_detail
+from fur_lighting import shade_strand_detail
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -145,6 +146,8 @@ class FurRenderingBatchRunner:
         rim_guide_mask_path: Path | None,
         rim_detail_strength: float,
         rear_rim_strength: float,
+        strand_contrast: float,
+        strand_highlight: float,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -169,6 +172,8 @@ class FurRenderingBatchRunner:
         self.rim_guide_mask_path = rim_guide_mask_path
         self.rim_detail_strength = rim_detail_strength
         self.rear_rim_strength = rear_rim_strength
+        self.strand_contrast = strand_contrast
+        self.strand_highlight = strand_highlight
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -449,6 +454,17 @@ class FurRenderingBatchRunner:
                 f"generated {len(hairs)} strands"
             )
 
+            # Geometry provenance for controlled lighting comparisons.
+            geometry_hash = hashlib.sha256()
+            for hair in hairs:
+                geometry_hash.update(hair.astype("<f4", copy=False).tobytes())
+            (self.output_root / f"{output_prefix}_strand_lighting.json").write_text(
+                json.dumps({"strand_count": len(hairs),
+                            "geometry_sha256": geometry_hash.hexdigest(),
+                            "strand_contrast": self.strand_contrast,
+                            "strand_highlight": self.strand_highlight}, indent=2),
+                encoding="utf-8")
+
             # Stage 5: rendering
             log(f"[{index}/{total}] Stage 5/7: rendering fur layer (this can take tens of seconds)")
             stage_started = time.time()
@@ -524,6 +540,9 @@ class FurRenderingBatchRunner:
                     cv2.line(fur_layer, (x0, y0), (x1, y1), draw_color, thickness=width_px, lineType=cv2.LINE_AA)
                     cv2.line(fur_alpha, (x0, y0), (x1, y1), draw_alpha, thickness=width_px, lineType=cv2.LINE_AA)
                 if fine_canvas is not None:
+                    segment_colors = shade_strand_detail(
+                        hair, segment_colors, hair_index, light_dir,
+                        root_normals[hair_index - 1], self.strand_contrast, self.strand_highlight)
                     if shaded_strands is None:
                         fine_canvas.draw_strand(hair, segment_colors, hair_index)
                     else:
@@ -823,6 +842,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional outward rear-rim fibres in [0, 1]; requires --rim-guide-mask.",
     )
     parser.add_argument(
+        "--strand-contrast", type=float, default=0.0,
+        help="Per-strand brightness variation in [0, 0.4]; 0 preserves shading; fine finish only.",
+    )
+    parser.add_argument(
+        "--strand-highlight", type=float, default=0.0,
+        help="Soft directional glint strength in [0, 0.3]; 0 disables; fine finish only.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -875,6 +902,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--rear-rim-strength must be finite and between 0 and 1.")
     if args.rear_rim_strength > 0 and args.rim_guide_mask is None:
         parser.error("--rear-rim-strength requires --rim-guide-mask.")
+    for flag, value, maximum in (("--strand-contrast", args.strand_contrast, 0.4),
+                                 ("--strand-highlight", args.strand_highlight, 0.3)):
+        if not np.isfinite(value) or not 0 <= value <= maximum:
+            parser.error(f"{flag} must be finite and between 0 and {maximum}.")
+        if value > 0 and args.fur_finish != "fine":
+            parser.error(f"{flag} requires --fur-finish fine.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -950,6 +983,10 @@ def main() -> int:
         run_suffix += f"-rim{args.rim_detail_strength:g}"
     if args.rear_rim_strength > 0:
         run_suffix += f"-rear{args.rear_rim_strength:g}"
+    if args.strand_contrast > 0:
+        run_suffix += f"-contrast{args.strand_contrast:g}"
+    if args.strand_highlight > 0:
+        run_suffix += f"-highlight{args.strand_highlight:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -976,6 +1013,7 @@ def main() -> int:
     log(f"Stroke width scale: {args.stroke_width_scale:g}")
     log(f"Fur density: {args.fur_density:g}")
     log(f"Fur finish: {args.fur_finish}; supersample {args.supersample}; tip tint {args.tip_environment_blend:g}")
+    log(f"Strand lighting: contrast {args.strand_contrast:g}; highlight {args.strand_highlight:g}")
     log(f"Underlayer mode: {args.underlayer_mode}")
     log(f"Exclude mask: {exclude_mask_path if exclude_mask_path is not None else 'none'}")
     log(f"Inner-wall mask: {inner_wall_mask_path if inner_wall_mask_path is not None else 'none'}")
@@ -1006,6 +1044,9 @@ def main() -> int:
                 "rim_guide_sha256": hashlib.sha256(rim_guide_mask_path.read_bytes()).hexdigest() if rim_guide_mask_path is not None else None,
                 "rim_detail_strength": args.rim_detail_strength,
                 "rear_rim_strength": args.rear_rim_strength,
+                "strand_contrast": args.strand_contrast,
+                "strand_highlight": args.strand_highlight,
+                "fur_lighting_sha256": hashlib.sha256((project_root / "fur_lighting.py").read_bytes()).hexdigest(),
                 "fur_rim_sha256": hashlib.sha256((project_root / "fur_rim.py").read_bytes()).hexdigest(),
                 "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
                 "renderer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -1045,6 +1086,8 @@ def main() -> int:
         rim_guide_mask_path=rim_guide_mask_path,
         rim_detail_strength=args.rim_detail_strength,
         rear_rim_strength=args.rear_rim_strength,
+        strand_contrast=args.strand_contrast,
+        strand_highlight=args.strand_highlight,
     )
     runner.load_models()
 
