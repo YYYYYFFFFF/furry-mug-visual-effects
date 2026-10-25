@@ -156,6 +156,12 @@ The optional `--soft-form 8` pass changes the cup geometry before normals and fu
 
 `soft_form.py` performs the guided 2.5D approximation and saves geometry/warp diagnostics. Only mug3 has received a complete soft-form render and visual check. No new release is implied.
 
+## Inner depth after soft-form deformation
+
+To reduce the shallow, filled-in opening in the mug3 soft-form trial, append `--cavity-depth 0.055 --cavity-length-scale 0.6` to the single-image command above. The guided interior recedes before normals and hair generation; inner fibres become shorter while retaining their roots. The rounded exterior and a protected lip band keep their geometry. This uses the transported opening guide and does not enable the older inner-wall opacity mode.
+
+Both controls default off (`0` depth, `1` length). `fur_cavity.py` implements the local relief; the [cavity experiment record](docs/cavity-depth-2026-10-25.md) contains the full command, comparisons and coverage tradeoff. Only mug3 has been tested. The ten-cup preset is unchanged.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.

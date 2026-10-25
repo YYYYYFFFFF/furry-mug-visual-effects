@@ -28,6 +28,7 @@ from matte_refinement import close_matte_gaps
 from fur_rim import apply_rear_rim_fringe, apply_rim_detail
 from fur_lighting import shade_strand_detail
 from soft_form import deform_soft_form
+from fur_cavity import refine_cavity
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -150,6 +151,8 @@ class FurRenderingBatchRunner:
         strand_contrast: float,
         strand_highlight: float,
         soft_form_amount: float = 0.0,
+        cavity_depth: float = 0.0,
+        cavity_length_scale: float = 1.0,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -177,6 +180,16 @@ class FurRenderingBatchRunner:
         self.strand_contrast = strand_contrast
         self.strand_highlight = strand_highlight
         self.soft_form_amount = soft_form_amount
+        self.cavity_depth = cavity_depth
+        self.cavity_length_scale = cavity_length_scale
+        self.cavity_active = cavity_depth > 0 or cavity_length_scale < 1
+        if not np.isfinite(cavity_depth) or not 0 <= cavity_depth <= 0.12:
+            raise ValueError("Cavity depth must be finite and in [0, 0.12].")
+        if not np.isfinite(cavity_length_scale) or not 0.2 <= cavity_length_scale <= 1:
+            raise ValueError("Cavity length scale must be finite and in [0.2, 1].")
+        if self.cavity_active and (rim_guide_mask_path is None or fur_finish != "fine"
+                                   or exclude_mask_path is not None or inner_wall_mask_path is not None):
+            raise ValueError("Cavity refinement requires fine fur, an opening guide and no older region-style masks.")
         if not np.isfinite(soft_form_amount) or not 0 <= soft_form_amount <= 12:
             raise ValueError("Soft-form amount must be finite and in [0, 12].")
         if soft_form_amount > 0 and (rim_guide_mask_path is None or fur_finish != "fine"
@@ -360,6 +373,24 @@ class FurRenderingBatchRunner:
                 log(f"[{index}/{total}] Soft form: {form.diagnostics['added_pixels']} added silhouette pixels; "
                     f"max displacement {form.diagnostics['max_displacement_px']:.2f}px")
 
+            # Apply interior relief after the guide has travelled with soft form.
+            sampling_depth = depth_norm
+            cavity = None
+            if self.cavity_active:
+                cavity = refine_cavity(depth_norm, mug_matte, rim_guide,
+                                       self.cavity_depth, self.cavity_length_scale)
+                depth_norm = cavity.depth
+                np.savez_compressed(self.output_root / f"{output_prefix}_cavity_geometry.npz",
+                                    before_depth=sampling_depth, after_depth=depth_norm,
+                                    opening=rim_guide, weight=cavity.weight,
+                                    recession=cavity.recession, length_scale=cavity.length_scale)
+                Image.fromarray((cavity.weight*255).astype(np.uint8)).save(
+                    self.output_root / f"{output_prefix}_cavity_support.png")
+                (self.output_root / f"{output_prefix}_cavity.json").write_text(
+                    json.dumps(cavity.diagnostics, indent=2), encoding="utf-8")
+                log(f"[{index}/{total}] Cavity: max recession {cavity.recession.max():.4f}; "
+                    f"inner pile scale {cavity.length_scale.min():.2f}")
+
             # Stage 3: normals
             log(f"[{index}/{total}] Stage 3/7: estimating surface normals")
             stage_started = time.time()
@@ -372,6 +403,10 @@ class FurRenderingBatchRunner:
                         z_value = depth_norm[row, col] * min(height, width) * 1.0
                         vertices.append([col, row, z_value])
             vertices = np.array(vertices)
+            sampling_vertices = vertices
+            if cavity is not None:
+                sampling_vertices = vertices.copy()
+                sampling_vertices[:, 2] = sampling_depth[mug_matte > 0].astype(np.float64) * min(height, width) * 1.0
             triangles = []
             for row in range(height - 1):
                 for col in range(width - 1):
@@ -412,7 +447,7 @@ class FurRenderingBatchRunner:
             stage_started = time.time()
             image_float = image_np.astype(np.float32) / 255.0
             mask = mug_matte.astype(np.uint8)
-            depth_scale = max(float(vertices[:, 2].max()), 1.0)
+            depth_scale = max(float(sampling_vertices[:, 2].max()), 1.0)
             fur_density = self.fur_density
             fur_length_min = 6.0
             fur_length_max = 15.0
@@ -425,12 +460,12 @@ class FurRenderingBatchRunner:
             root_positions = []
             root_normals = []
             root_lengths = []
-            z_min = vertices[:, 2].min()
-            z_max = vertices[:, 2].max()
+            z_min = sampling_vertices[:, 2].min()
+            z_max = sampling_vertices[:, 2].max()
             z_range = z_max - z_min + 1e-6
-            center = vertices.mean(axis=0)
+            center = sampling_vertices.mean(axis=0)
             for triangle in triangles:
-                v0, v1, v2 = vertices[triangle].astype(np.float32)
+                v0, v1, v2 = sampling_vertices[triangle].astype(np.float32)
                 area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
                 z_values = [v0[2], v1[2], v2[2]]
                 z_range_tri = max(z_values) - min(z_values)
@@ -450,14 +485,20 @@ class FurRenderingBatchRunner:
                         v = 1.0 - v
                     w = 1.0 - u - v
                     root = w * v0 + u * v1 + v * v2
+                    reference_root_z = root[2]
+                    if cavity is not None:
+                        q0, q1, q2 = vertices[triangle].astype(np.float32)
+                        root = w * q0 + u * q1 + v * q2
                     root_normal = w * n0 + u * n1 + v * n2
                     root_normal = root_normal / (np.linalg.norm(root_normal) + 1e-8)
                     length_variation = rng.uniform(0.6, 1.4)
                     base_length = rng.uniform(fur_length_min, fur_length_max)
-                    length = base_length * length_variation * (0.7 + 0.3 * np.clip(root[2] / depth_scale, 0.0, 1.0))
+                    length = base_length * length_variation * (0.7 + 0.3 * np.clip(reference_root_z / depth_scale, 0.0, 1.0))
                     root_x = int(np.clip(round(float(root[0])), 0, width - 1))
                     root_y = int(np.clip(round(float(root[1])), 0, height - 1))
                     length *= 1.0 - (1.0 - self.inner_wall_length_scale) * inner_wall_weight[root_y, root_x]
+                    if cavity is not None:
+                        length *= cavity.length_scale[root_y, root_x]
                     root_positions.append(root)
                     root_normals.append(root_normal)
                     root_lengths.append(length)
@@ -470,6 +511,12 @@ class FurRenderingBatchRunner:
                 radial_dir = root - center
                 radial_dir = radial_dir / (np.linalg.norm(radial_dir) + 1e-8)
                 radial_strength = 0.35
+                if cavity is not None:
+                    ry = int(np.clip(round(float(root[1])), 0, height-1))
+                    rx = int(np.clip(round(float(root[0])), 0, width-1))
+                    # Inner wall fibres follow the recessed surface rather than
+                    # the body-wide outward radial direction.
+                    radial_strength *= 1.0 - float(cavity.weight[ry, rx])
                 init_dir = (1.0 - radial_strength) * normal + radial_strength * radial_dir + direction_noise
                 init_dir = init_dir / (np.linalg.norm(init_dir) + 1e-8)
                 velocity = init_dir * length
@@ -893,6 +940,14 @@ def parse_args() -> argparse.Namespace:
         help="Opt-in guided silhouette/depth padding, 0 to 12 pixels at 602px; single fine-fur image only.",
     )
     parser.add_argument(
+        "--cavity-depth", type=float, default=0.0,
+        help="Optional inward relief inside the transformed opening guide, in [0, 0.12] relative depth.",
+    )
+    parser.add_argument(
+        "--cavity-length-scale", type=float, default=1.0,
+        help="Inner pile length multiplier in [0.2, 1]; preserves root density and the outer lip.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -958,6 +1013,15 @@ def parse_args() -> argparse.Namespace:
             parser.error("--soft-form requires --image, --rim-guide-mask and --fur-finish fine.")
         if args.exclude_mask is not None or args.inner_wall_mask is not None:
             parser.error("--soft-form cannot yet be combined with the older region-style masks.")
+    if not np.isfinite(args.cavity_depth) or not 0 <= args.cavity_depth <= 0.12:
+        parser.error("--cavity-depth must be finite and between 0 and 0.12.")
+    if not np.isfinite(args.cavity_length_scale) or not 0.2 <= args.cavity_length_scale <= 1:
+        parser.error("--cavity-length-scale must be finite and between 0.2 and 1.")
+    if args.cavity_depth > 0 or args.cavity_length_scale < 1:
+        if args.image is None or args.rim_guide_mask is None or args.fur_finish != "fine":
+            parser.error("Cavity refinement requires --image, --rim-guide-mask and --fur-finish fine.")
+        if args.exclude_mask is not None or args.inner_wall_mask is not None:
+            parser.error("Cavity refinement cannot be combined with older region-style masks.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -1039,6 +1103,8 @@ def main() -> int:
         run_suffix += f"-highlight{args.strand_highlight:g}"
     if args.soft_form > 0:
         run_suffix += f"-soft{args.soft_form:g}"
+    if args.cavity_depth > 0 or args.cavity_length_scale < 1:
+        run_suffix += f"-cavity{args.cavity_depth:g}-pile{args.cavity_length_scale:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -1099,6 +1165,9 @@ def main() -> int:
                 "strand_contrast": args.strand_contrast,
                 "strand_highlight": args.strand_highlight,
                 "soft_form_amount": args.soft_form,
+                "cavity_depth": args.cavity_depth,
+                "cavity_length_scale": args.cavity_length_scale,
+                "fur_cavity_sha256": hashlib.sha256((project_root / "fur_cavity.py").read_bytes()).hexdigest(),
                 "soft_form_sha256": hashlib.sha256((project_root / "soft_form.py").read_bytes()).hexdigest(),
                 "fur_lighting_sha256": hashlib.sha256((project_root / "fur_lighting.py").read_bytes()).hexdigest(),
                 "fur_rim_sha256": hashlib.sha256((project_root / "fur_rim.py").read_bytes()).hexdigest(),
@@ -1143,6 +1212,8 @@ def main() -> int:
         strand_contrast=args.strand_contrast,
         strand_highlight=args.strand_highlight,
         soft_form_amount=args.soft_form,
+        cavity_depth=args.cavity_depth,
+        cavity_length_scale=args.cavity_length_scale,
     )
     runner.load_models()
 

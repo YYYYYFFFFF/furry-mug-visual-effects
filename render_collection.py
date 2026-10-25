@@ -86,7 +86,7 @@ def main() -> int:
     stamp = datetime.now(ZoneInfo("Australia/Sydney")).strftime("%Y%m%d-%H%M%S")
     out = ROOT / "outputs" / f"{stamp}-all-mugs-fine-b"
     out.mkdir(parents=True, exist_ok=False)
-    source_files = ["render_collection.py", "fur_rendering_batch.py", "fur_lighting.py", "fur_rim.py", "fur_strokes.py", "matte_refinement.py", "soft_form.py"]
+    source_files = ["render_collection.py", "fur_rendering_batch.py", "fur_lighting.py", "fur_rim.py", "fur_strokes.py", "matte_refinement.py", "soft_form.py", "fur_cavity.py"]
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     config = {"preset": preset, "preset_sha256": sha256(preset_path), "starting_code_commit": commit,
               "source_sha256": {name: sha256(ROOT / name) for name in source_files},
