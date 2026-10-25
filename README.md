@@ -148,6 +148,14 @@ Both default to `0` and require `--fur-finish fine` when positive. Contrast is a
 
 `fur_lighting.py` implements this artistic shading approximation. Runs save settings/source hashes and `image_1_strand_lighting.json` with primary strand count and geometry hash. The [controlled experiment](docs/strand-lighting-2026-10-24.md) records the accepted baseline, A/B outputs, unchanged coverage and limitations. Default settings reproduce the accepted mug3 PNG byte for byte. These are local development candidates, not a release.
 
+## Single-cup soft-form trial
+
+The optional `--soft-form 8` pass changes the cup geometry before normals and fur generation. On mug3 it slightly expands the body/handle, rounds the rim depth transition, and transports foreground colour, matte, depth and the opening guide through one smooth mapping. It does not warp the already rendered fur image. Add this flag to the accepted **single-image mug3** fine-fur command with its rim guide and B lighting controls; the full command and comparisons are in [the soft-form trial](docs/soft-form-2026-10-25.md).
+
+`0` is the default and reproduces the accepted mug3 B PNG exactly. Positive values require `--image`, `--fur-finish fine` and `--rim-guide-mask`; older exclusion/inner-wall styling masks are not supported in this first experiment. The value is a displacement scale at 602px, not a strict maximum or a physical measurement. The existing ten-cup preset remains unchanged and does not enable deformation.
+
+`soft_form.py` performs the guided 2.5D approximation and saves geometry/warp diagnostics. Only mug3 has received a complete soft-form render and visual check. No new release is implied.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.

@@ -68,3 +68,7 @@ Inspect `image_1_final_fur_alpha.png` for coverage including the primary fur and
 ## Full-set review, 25 October 2026
 
 Yifan judged the latest texture close to her intended appearance, then requested deleting previous outputs and testing all ten existing cups. The [full-set run](all-mugs-2026-10-25.md) uses the recommended B settings as a shared baseline. Per-image SAM boxes and opening guides are reviewed separately; these are placement controls, not evidence of automatic rim understanding. Mug3's retained final checksum allows an exact check against the previous B image after old outputs are removed. The new contact sheet and original/result gallery are the current visual review artifacts. Earlier output directories cited above were deleted at the user's request.
+
+## Underlying shape, 25 October 2026
+
+Yifan clarified that the desired softness concerns the cup geometry itself, beyond blending neighbouring fur. The [one-cup soft-form trial](soft-form-2026-10-25.md) therefore uses mug3 to test a rounder lip, slight body/handle inflation and local depth padding before normal/strand generation. Evaluate the contour and neutral surface as well as the final fur. The current ten-cup B gallery remains the undeformed reference; this new candidate awaits user review.

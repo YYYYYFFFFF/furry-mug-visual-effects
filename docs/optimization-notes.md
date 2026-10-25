@@ -16,11 +16,11 @@ The [depth-order comparison](depth-order-2026-10-24.md) then isolated a major ca
 
 ## Current scope and next decisions
 
-Yifan judged the latest texture close to the desired state and requested deletion of previous local outputs followed by a test of every current cup. The [25 October collection test](all-mugs-2026-10-25.md) uses the recommended B settings and image-specific placement controls. All older generated outputs/comparison files were removed as requested; their dated experiment documents remain historical records.
+The full-set test is complete. Yifan then clarified that a plush cup should have a softer, rounder underlying shape; adding fur to the unchanged ceramic shape is insufficient. She authorized a one-cup geometry experiment. The [mug3 soft-form trial](soft-form-2026-10-25.md) changes silhouette/depth before regenerating the existing fur finish. The ten-cup gallery and B preset remain intact.
 
-1. **Review the full set.** Compare each new result against its source photograph in the generated gallery, including handle coverage, visible opening, silhouette, broad colour and surface texture.
-2. **Keep the accepted shared styling.** Do not retune density, stroke width, alpha or lighting separately for each image during the transfer check. SAM boxes and manual rim placements correct image-specific region control.
-3. **Record transfer limitations.** Mug7 has no visible opening; mug10 has a notched/asymmetric rim. The algorithm still uses approximate depth and image-specific guidance.
-4. **Publish only after the relevant release instruction.** User satisfaction with an effect and this local collection test do not assign a release name or trigger publication.
+1. **Review shape softness on mug3.** Compare the rendered result, contour overlay and neutral shaded-depth diagnostic. The current trial is modest; the lip is rounder and the body/handle slightly fuller, with cup structure retained.
+2. **Separate geometry changes from hair styling.** Width, density parameter and B lighting remain fixed, but new surface area and normals regenerate different strands. Do not describe the result as a pixel-matched edit of the old fur.
+3. **Preserve openings and support.** Keep the handle hole and cup opening coherent and the geometric foot anchored. Transfer to other images needs separate review.
+4. **Await visual direction before broader changes.** This trial does not enable deformation for all ten cups or publish a release.
 
 Do not claim an achieved reference-similarity percentage without supporting review.

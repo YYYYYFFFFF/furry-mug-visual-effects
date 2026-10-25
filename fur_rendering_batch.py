@@ -27,6 +27,7 @@ from fur_strokes import FineFurCanvas, depth_ordered_strands, repair_aa_color
 from matte_refinement import close_matte_gaps
 from fur_rim import apply_rear_rim_fringe, apply_rim_detail
 from fur_lighting import shade_strand_detail
+from soft_form import deform_soft_form
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -148,6 +149,7 @@ class FurRenderingBatchRunner:
         rear_rim_strength: float,
         strand_contrast: float,
         strand_highlight: float,
+        soft_form_amount: float = 0.0,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -174,6 +176,12 @@ class FurRenderingBatchRunner:
         self.rear_rim_strength = rear_rim_strength
         self.strand_contrast = strand_contrast
         self.strand_highlight = strand_highlight
+        self.soft_form_amount = soft_form_amount
+        if not np.isfinite(soft_form_amount) or not 0 <= soft_form_amount <= 12:
+            raise ValueError("Soft-form amount must be finite and in [0, 12].")
+        if soft_form_amount > 0 and (rim_guide_mask_path is None or fur_finish != "fine"
+                                    or exclude_mask_path is not None or inner_wall_mask_path is not None):
+            raise ValueError("Soft form requires fine fur, an opening guide and no older region-style masks.")
         self.model_cache_dir = project_root / "model_cache"
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         self.depth_pipe = None
@@ -211,6 +219,7 @@ class FurRenderingBatchRunner:
         try:
             image = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
             image_np = np.array(image)
+            source_image_np = image_np
             height, width = image_np.shape[:2]
             log(f"[{index}/{total}] Loaded image with size {width} x {height}")
 
@@ -320,6 +329,36 @@ class FurRenderingBatchRunner:
                 f"[{index}/{total}] Stage 2/7 complete: {stage_elapsed_message(stage_started)}; "
                 f"mask ratio {mask_ratio:.3f}, border touches {border_touch_count}"
             )
+
+            if self.soft_form_amount > 0:
+                log(f"[{index}/{total}] Soft form: deforming silhouette and depth before normals")
+                original_mask, original_depth = mug_matte.copy(), depth_norm.copy()
+                original_guide = rim_guide.copy()
+                form = deform_soft_form(image_np, depth_norm, mug_matte, rim_guide,
+                                        self.soft_form_amount)
+                image_np, depth_norm = form.rgb, form.depth
+                mug_matte, best_mask = form.mask.astype(np.uint8), form.mask
+                rim_guide = form.opening
+                mug_matte_255 = mug_matte * 255
+                matte_overlay = image_np.copy()
+                matte_overlay[best_mask] = (image_np[best_mask]*0.5 + np.array([255, 0, 0])*0.5).astype(np.uint8)
+                Image.fromarray(image_np).save(self.output_root / f"{output_prefix}_soft_form_source.png")
+                Image.fromarray(original_mask*255).save(self.output_root / f"{output_prefix}_before_soft_form_matte.png")
+                Image.fromarray(rim_guide.astype(np.uint8)*255).save(self.output_root / f"{output_prefix}_soft_form_opening.png")
+                contours = image_np.copy()
+                for shape, colour in ((original_mask, (255, 90, 40)), (mug_matte, (30, 220, 240))):
+                    lines, _ = cv2.findContours(shape, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                    cv2.drawContours(contours, lines, -1, colour, 1)
+                Image.fromarray(contours).save(self.output_root / f"{output_prefix}_soft_form_contours.png")
+                np.savez_compressed(self.output_root / f"{output_prefix}_soft_form_geometry.npz",
+                                    original_depth=original_depth, deformed_depth=depth_norm,
+                                    original_mask=original_mask, deformed_mask=mug_matte,
+                                    original_opening=original_guide, deformed_opening=rim_guide,
+                                    map_x=form.map_x, map_y=form.map_y, padding=form.padding)
+                (self.output_root / f"{output_prefix}_soft_form.json").write_text(
+                    json.dumps(form.diagnostics, indent=2), encoding="utf-8")
+                log(f"[{index}/{total}] Soft form: {form.diagnostics['added_pixels']} added silhouette pixels; "
+                    f"max displacement {form.diagnostics['max_displacement_px']:.2f}px")
 
             # Stage 3: normals
             log(f"[{index}/{total}] Stage 3/7: estimating surface normals")
@@ -716,7 +755,7 @@ class FurRenderingBatchRunner:
             depth_vis = cv2.cvtColor(depth_vis, cv2.COLOR_BGR2RGB)
             figure = plt.figure(figsize=(15, 10))
             axes = figure.subplots(2, 3)
-            axes[0, 0].imshow(image_np)
+            axes[0, 0].imshow(source_image_np)
             axes[0, 0].axis("off")
             axes[0, 0].set_title("1. Original")
             axes[0, 1].imshow(mask, cmap="gray")
@@ -850,6 +889,10 @@ def parse_args() -> argparse.Namespace:
         help="Soft directional glint strength in [0, 0.3]; 0 disables; fine finish only.",
     )
     parser.add_argument(
+        "--soft-form", type=float, default=0.0,
+        help="Opt-in guided silhouette/depth padding, 0 to 12 pixels at 602px; single fine-fur image only.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -908,6 +951,13 @@ def parse_args() -> argparse.Namespace:
             parser.error(f"{flag} must be finite and between 0 and {maximum}.")
         if value > 0 and args.fur_finish != "fine":
             parser.error(f"{flag} requires --fur-finish fine.")
+    if not np.isfinite(args.soft_form) or not 0 <= args.soft_form <= 12:
+        parser.error("--soft-form must be finite and between 0 and 12.")
+    if args.soft_form > 0:
+        if args.image is None or args.rim_guide_mask is None or args.fur_finish != "fine":
+            parser.error("--soft-form requires --image, --rim-guide-mask and --fur-finish fine.")
+        if args.exclude_mask is not None or args.inner_wall_mask is not None:
+            parser.error("--soft-form cannot yet be combined with the older region-style masks.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -987,6 +1037,8 @@ def main() -> int:
         run_suffix += f"-contrast{args.strand_contrast:g}"
     if args.strand_highlight > 0:
         run_suffix += f"-highlight{args.strand_highlight:g}"
+    if args.soft_form > 0:
+        run_suffix += f"-soft{args.soft_form:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -1046,6 +1098,8 @@ def main() -> int:
                 "rear_rim_strength": args.rear_rim_strength,
                 "strand_contrast": args.strand_contrast,
                 "strand_highlight": args.strand_highlight,
+                "soft_form_amount": args.soft_form,
+                "soft_form_sha256": hashlib.sha256((project_root / "soft_form.py").read_bytes()).hexdigest(),
                 "fur_lighting_sha256": hashlib.sha256((project_root / "fur_lighting.py").read_bytes()).hexdigest(),
                 "fur_rim_sha256": hashlib.sha256((project_root / "fur_rim.py").read_bytes()).hexdigest(),
                 "matte_refinement_sha256": hashlib.sha256((project_root / "matte_refinement.py").read_bytes()).hexdigest(),
@@ -1088,6 +1142,7 @@ def main() -> int:
         rear_rim_strength=args.rear_rim_strength,
         strand_contrast=args.strand_contrast,
         strand_highlight=args.strand_highlight,
+        soft_form_amount=args.soft_form,
     )
     runner.load_models()
 
