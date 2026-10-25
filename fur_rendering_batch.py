@@ -29,6 +29,7 @@ from fur_rim import apply_rear_rim_fringe, apply_rim_detail
 from fur_lighting import shade_strand_detail
 from soft_form import deform_soft_form
 from fur_cavity import refine_cavity
+from fur_rim_lighting import rim_light_maps, shade_rim_strand
 
 REQUIRED_PACKAGES = {
     "cv2": "opencv-python",
@@ -153,6 +154,8 @@ class FurRenderingBatchRunner:
         soft_form_amount: float = 0.0,
         cavity_depth: float = 0.0,
         cavity_length_scale: float = 1.0,
+        rim_light: float = 0.0,
+        rim_shadow: float = 0.0,
     ) -> None:
         self.project_root = project_root
         self.image_dir = image_dir
@@ -180,6 +183,14 @@ class FurRenderingBatchRunner:
         self.strand_contrast = strand_contrast
         self.strand_highlight = strand_highlight
         self.soft_form_amount = soft_form_amount
+        self.rim_light = rim_light
+        self.rim_shadow = rim_shadow
+        for value in (rim_light, rim_shadow):
+            if not np.isfinite(value) or not 0 <= value <= 0.5:
+                raise ValueError("Rim light/shadow must be finite and in [0, 0.5].")
+        if (rim_light > 0 or rim_shadow > 0) and (rim_guide_mask_path is None or fur_finish != "fine"
+                                                or exclude_mask_path is not None or inner_wall_mask_path is not None):
+            raise ValueError("Rim lighting requires fine fur, an opening guide and no older region-style masks.")
         self.cavity_depth = cavity_depth
         self.cavity_length_scale = cavity_length_scale
         self.cavity_active = cavity_depth > 0 or cavity_length_scale < 1
@@ -565,6 +576,20 @@ class FurRenderingBatchRunner:
             else:
                 light_dir = np.array([0.25, -0.15, 0.95], dtype=np.float32)
             light_dir = light_dir / np.linalg.norm(light_dir)
+            rim_lighting = None
+            if self.rim_light > 0 or self.rim_shadow > 0:
+                rim_lighting = rim_light_maps(depth_norm, mask, rim_guide, light_dir,
+                                              self.rim_light, self.rim_shadow)
+                np.savez_compressed(self.output_root / f"{output_prefix}_rim_lighting.npz",
+                                    gain=rim_lighting.gain, highlight=rim_lighting.highlight,
+                                    shadow=rim_lighting.shadow)
+                (self.output_root / f"{output_prefix}_rim_lighting.json").write_text(
+                    json.dumps(rim_lighting.diagnostics, indent=2), encoding="utf-8")
+                for name, field in (("highlight", rim_lighting.highlight), ("shadow", rim_lighting.shadow)):
+                    Image.fromarray((field*255).astype(np.uint8)).save(
+                        self.output_root / f"{output_prefix}_rim_{name}_support.png")
+                log(f"[{index}/{total}] Rim lighting: gain "
+                    f"{rim_lighting.gain.min():.3f} to {rim_lighting.gain.max():.3f}")
             light_color = np.array([1.0, 0.95, 0.9], dtype=np.float32)
             blurred_image = cv2.GaussianBlur(image_float, (0, 0), sigmaX=18, sigmaY=18)
             mask_3d = mask[:, :, np.newaxis].astype(np.float32)
@@ -629,6 +654,8 @@ class FurRenderingBatchRunner:
                     segment_colors = shade_strand_detail(
                         hair, segment_colors, hair_index, light_dir,
                         root_normals[hair_index - 1], self.strand_contrast, self.strand_highlight)
+                    if rim_lighting is not None:
+                        segment_colors = shade_rim_strand(segment_colors, rim_lighting.gain[root_y, root_x])
                     if shaded_strands is None:
                         fine_canvas.draw_strand(hair, segment_colors, hair_index)
                     else:
@@ -948,6 +975,14 @@ def parse_args() -> argparse.Namespace:
         help="Inner pile length multiplier in [0.2, 1]; preserves root density and the outer lip.",
     )
     parser.add_argument(
+        "--rim-light", type=float, default=0.0,
+        help="Local rounded-lip illumination in [0, 0.5]; fine fur with opening guide only.",
+    )
+    parser.add_argument(
+        "--rim-shadow", type=float, default=0.0,
+        help="Depth-gated inner-wall contact shadow in [0, 0.5]; fine fur with opening guide only.",
+    )
+    parser.add_argument(
         "--fur-order", choices=("generation", "depth"), default="generation",
         help="Fine-fur draw order: original traversal or approximate far-to-near root depth.",
     )
@@ -1022,6 +1057,14 @@ def parse_args() -> argparse.Namespace:
             parser.error("Cavity refinement requires --image, --rim-guide-mask and --fur-finish fine.")
         if args.exclude_mask is not None or args.inner_wall_mask is not None:
             parser.error("Cavity refinement cannot be combined with older region-style masks.")
+    for flag, value in (("--rim-light", args.rim_light), ("--rim-shadow", args.rim_shadow)):
+        if not np.isfinite(value) or not 0 <= value <= 0.5:
+            parser.error(f"{flag} must be finite and between 0 and 0.5.")
+    if args.rim_light > 0 or args.rim_shadow > 0:
+        if args.image is None or args.rim_guide_mask is None or args.fur_finish != "fine":
+            parser.error("Rim lighting requires --image, --rim-guide-mask and --fur-finish fine.")
+        if args.exclude_mask is not None or args.inner_wall_mask is not None:
+            parser.error("Rim lighting cannot be combined with older region-style masks.")
     if args.fur_order != "generation" and args.fur_finish != "fine":
         parser.error("--fur-order depth requires --fur-finish fine.")
     if args.fill_fur_gaps and args.fur_finish != "fine":
@@ -1105,6 +1148,8 @@ def main() -> int:
         run_suffix += f"-soft{args.soft_form:g}"
     if args.cavity_depth > 0 or args.cavity_length_scale < 1:
         run_suffix += f"-cavity{args.cavity_depth:g}-pile{args.cavity_length_scale:g}"
+    if args.rim_light > 0 or args.rim_shadow > 0:
+        run_suffix += f"-liplight{args.rim_light:g}-shadow{args.rim_shadow:g}"
     output_root = output_base_dir / f"{run_timestamp}-{args.depth_source}{run_suffix}"
 
     if not image_dir.exists():
@@ -1165,6 +1210,9 @@ def main() -> int:
                 "strand_contrast": args.strand_contrast,
                 "strand_highlight": args.strand_highlight,
                 "soft_form_amount": args.soft_form,
+                "rim_light": args.rim_light,
+                "rim_shadow": args.rim_shadow,
+                "fur_rim_lighting_sha256": hashlib.sha256((project_root / "fur_rim_lighting.py").read_bytes()).hexdigest(),
                 "cavity_depth": args.cavity_depth,
                 "cavity_length_scale": args.cavity_length_scale,
                 "fur_cavity_sha256": hashlib.sha256((project_root / "fur_cavity.py").read_bytes()).hexdigest(),
@@ -1212,6 +1260,8 @@ def main() -> int:
         strand_contrast=args.strand_contrast,
         strand_highlight=args.strand_highlight,
         soft_form_amount=args.soft_form,
+        rim_light=args.rim_light,
+        rim_shadow=args.rim_shadow,
         cavity_depth=args.cavity_depth,
         cavity_length_scale=args.cavity_length_scale,
     )

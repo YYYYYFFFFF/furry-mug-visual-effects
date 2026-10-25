@@ -162,6 +162,12 @@ To reduce the shallow, filled-in opening in the mug3 soft-form trial, append `--
 
 Both controls default off (`0` depth, `1` length). `fur_cavity.py` implements the local relief; the [cavity experiment record](docs/cavity-depth-2026-10-25.md) contains the full command, comparisons and coverage tradeoff. Only mug3 has been tested. The ten-cup preset is unchanged.
 
+## Lip lighting and inner-wall separation
+
+For the mug3 cavity candidate, append `--rim-light 0.25 --rim-shadow 0.28` to emphasize the rounded lip's light and its overlap with the inner wall. The optional pass adjusts individual strand colours using the transported opening guide, current depth and estimated light direction. Strand geometry and coverage remain unchanged. Both parameters default to `0`.
+
+`fur_rim_lighting.py` implements this local approximation. See [the lighting trial](docs/rim-lighting-2026-10-25.md) for comparisons, exact runs and limitations. Only mug3 has been checked; the ten-cup preset remains unchanged.
+
 ## Current constraints
 
 - Input should contain one centred, clearly bounded mug on a fairly simple background.
