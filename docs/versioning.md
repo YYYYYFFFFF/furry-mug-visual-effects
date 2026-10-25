@@ -2,6 +2,10 @@
 
 Only versions Yifan has reviewed and approved are published as GitHub Releases. Development commits are not releases on their own. **Furry Mug V1.0** records the mug3 result from `20261025-153141`, approved for publication on 25 October 2026. See [its release record](releases/v1.0.md). The `original-program` tag and its archived course results remain in the private GitHub repository.
 
+## Release language
+
+Write this project's GitHub release titles and release notes in English.
+
 ## Names and version numbers
 
 | Release title | Git tag | Meaning |
