@@ -2,7 +2,9 @@
 
 An independent COMP5405 course project that turns a centred mug photo into a fur-like composite using pretrained depth estimation, SAM segmentation, and procedural strand rendering. The course output is an exploratory approximation and does not match the quality of the reference paper.
 
-This local checkout is on `improve/fur-quality-v2`, with local depth, mask and fur-stroke experiments. The original course program is preserved by the `original-program` Git tag and GitHub Release. The input archive is tracked in `data/input-images/`; working copies in `image_folder/` and the reference PDF remain Git-ignored.
+The current approved release is **[Furry Mug V1.0](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/v1.0)**, based on the reviewed mug3 result with rounded geometry, a recessed furry interior and local lip lighting. See [the exact reproduction command and archived results](docs/releases/v1.0.md). The final configuration has been reviewed on mug3; the earlier ten-cup B test used an earlier configuration.
+
+The original course program is preserved by the `original-program` Git tag and GitHub Release. The input archive is tracked in `data/input-images/`; working copies in `image_folder/` and the reference PDF remain Git-ignored. The experiment sections below preserve the development history and its findings at the time.
 
 See [release and result archive](docs/versioning.md) for the version names and the private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) with the saved course results.
 

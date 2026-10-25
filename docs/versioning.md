@@ -1,6 +1,6 @@
 # Release and result archive
 
-Only versions Yifan has reviewed and approved are published as GitHub Releases. Development commits, including the current depth-precision experiment, are not releases. The `original-program` tag and its archived course results are published in the private GitHub repository.
+Only versions Yifan has reviewed and approved are published as GitHub Releases. Development commits are not releases on their own. **Furry Mug V1.0** records the mug3 result from `20261025-153141`, approved for publication on 25 October 2026. See [its release record](releases/v1.0.md). The `original-program` tag and its archived course results remain in the private GitHub repository.
 
 ## Names and version numbers
 
@@ -21,4 +21,4 @@ Store source mug images in the same private repository under `data/input-images/
 
 Pretrained model weights are runtime dependencies, not release images. The script obtains Depth Anything V2 through Transformers and downloads the SAM ViT-B checkpoint when absent. Record the exact model source and version or file checksum used for an approved run. Do not upload weight copies by default.
 
-The private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) includes ten saved full-pipeline PNGs from the course report materials in `original-program-results.zip`, with source notes and checksums. They were not regenerated from the tagged code, and their numbered mapping to individual input files has not been independently verified. The current v2 depth experiment has not passed visual review and has no release tag.
+The private [Original program Release](https://github.com/YYYYYFFFFF/furry-mug-visual-effects/releases/tag/original-program) includes ten saved full-pipeline PNGs from the course report materials in `original-program-results.zip`, with source notes and checksums. They were not regenerated from the tagged code, and their numbered mapping to individual input files has not been independently verified. The first improved release, **Furry Mug V1.0** (`v1.0`), adds the approved mug3 final and its reproducibility bundle. Intermediate development outputs are not separate approved releases.
